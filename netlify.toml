@@ -10,6 +10,9 @@
 
 [build.environment]
   NODE_VERSION = "22.13.0"
+  # vinext static export — not a standard `next build` / `.next` deploy.
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
+  NETLIFY_SKIP_FRAMEWORK_DETECTION = "true"
 
 # Client-side navigation uses query params on /. This rewrite covers any
 # direct path hits; Netlify still serves real files (_next/static, etc.) first.
