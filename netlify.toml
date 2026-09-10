@@ -1,0 +1,19 @@
+# BMG Security HRMS — static deploy on Netlify.
+#
+# This app is built with vinext (not `next build`). Static HTML lands in
+# dist/client after `npm run build`. Do NOT enable @netlify/plugin-nextjs —
+# that plugin expects a .next folder and will fail.
+
+[build]
+  command = "npm run build"
+  publish = "dist/client"
+
+[build.environment]
+  NODE_VERSION = "22.13.0"
+
+# Client-side navigation uses query params on /. This rewrite covers any
+# direct path hits; Netlify still serves real files (_next/static, etc.) first.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

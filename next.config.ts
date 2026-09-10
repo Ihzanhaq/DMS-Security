@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Static HTML for Netlify and other static hosts (no Worker runtime required).
+  output: "export",
 };
 
 export default nextConfig;
