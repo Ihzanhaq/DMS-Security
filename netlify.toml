@@ -5,11 +5,14 @@
 # that plugin expects a .next folder and will fail.
 
 [build]
-  command = "npm run build"
+  # Re-install with optional platform bindings (rolldown linux .node) then build.
+  command = "npm run build:netlify"
   publish = "dist/client"
 
 [build.environment]
   NODE_VERSION = "22.13.0"
+  NPM_CONFIG_PRODUCTION = "false"
+  NPM_FLAGS = "--include=optional"
   # vinext static export — not a standard `next build` / `.next` deploy.
   NETLIFY_NEXT_PLUGIN_SKIP = "true"
   NETLIFY_SKIP_FRAMEWORK_DETECTION = "true"
