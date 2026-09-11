@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft, Buildings, CalendarCheck, Check, CheckCircle, ClockCountdown,
   Crosshair, FileText, FloppyDisk, Package, Plus, ShieldCheck,
@@ -9,7 +9,9 @@ import {
 import { DefRows, DetailDrawer, PageHeader, Panel, PersonCell, StatStrip, Status, Timeline } from "@/components/shared/screen-elements";
 import { GeoMap } from "@/components/shared/geo-map";
 import { useToast } from "@/components/shared/toast-context";
-import { rupees, skillOptions } from "@/lib/mock-data";
+import { employees as employeeRecords, rupees, sites as siteRecords, skillOptions, statutorySettings } from "@/lib/mock-data";
+import { usePayroll } from "@/components/shared/payroll-context";
+import type { BenefitOverride, BenefitScheme, PayBasis, Role } from "@/types/domain";
 
 const districts = ["Thiruvananthapuram", "Kollam", "Alappuzha", "Kottayam", "Ernakulam"];
 const employees = ["Suresh Babu", "Fathima N", "Rajeev Kumar", "Anzar M", "Shamnad C M"];
@@ -24,24 +26,33 @@ function SavedNotice({ children = "Changes saved in the frontend prototype." }: 
   return <div className="saved-notice" role="status"><CheckCircle weight="fill" /><span>{children}</span></div>;
 }
 
-export function EmployeeFormScreen({ onBack, onImport }: { onBack: () => void; onImport: () => void }) {
+export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: () => void; onImport: () => void; employeeId?:string|null }) {
+  const { employeeRules, updateEmployeeRule } = usePayroll();
+  const employee = employeeRecords.find(item => item.id === employeeId) ?? employeeRecords[0];
+  const targetEmployeeId = employeeId ?? "BMG-NEW";
+  const currentRule = employeeRules.filter(rule => rule.employeeId === targetEmployeeId).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
   const [saved, setSaved] = useState(false);
-  const [payBasis, setPayBasis] = useState("Monthly salary");
+  const [payBasis, setPayBasis] = useState<PayBasis>(currentRule?.basis ?? "monthly");
+  const [amount, setAmount] = useState(currentRule?.monthlySalary ?? currentRule?.dailyRate ?? 16000);
+  const [payableDays, setPayableDays] = useState(currentRule?.payableDays ?? 26);
+  const [pfOverride, setPfOverride] = useState<BenefitOverride>(currentRule?.pfOverride ?? "inherit");
+  const [esiOverride, setEsiOverride] = useState<BenefitOverride>(currentRule?.esiOverride ?? "inherit");
+  const [effectiveFrom, setEffectiveFrom] = useState("2026-09-01");
   const [skills, setSkills] = useState<string[]>(["Day book", "General security"]);
   const availableSkills: string[] = [...skillOptions];
   const toggleSkill = (skill: string) => setSkills(current => current.includes(skill) ? current.filter(item => item !== skill) : [...current, skill]);
 
   return <>
     <PageHeader title="Employee profile" description="Identity, capability, employment, statutory and recovery settings."
-      actions={<><BackButton onBack={onBack}/><button className="secondary-button" onClick={onImport}>Import employees</button><button className="primary-button" onClick={() => setSaved(true)}><FloppyDisk />Save employee</button></>} />
+      actions={<><BackButton onBack={onBack}/><button className="secondary-button" onClick={onImport}>Import employees</button><button className="primary-button" onClick={() => { updateEmployeeRule({ employeeId:targetEmployeeId, effectiveFrom, basis:payBasis, monthlySalary:payBasis==="monthly"?amount:undefined, dailyRate:payBasis==="daily"?amount:undefined, payableDays, pfOverride, esiOverride }); setSaved(true); }}><FloppyDisk />Save employee</button></>} />
     {saved && <SavedNotice>Employee profile saved with an effective date.</SavedNotice>}
     <div className="workflow-grid">
       <Panel title="Identity and employment" description="Core details used across deployment and payroll.">
         <div className="form-grid">
-          <label><span>Employee ID</span><input defaultValue="BMG-NEW" /></label>
-          <label><span>Full name</span><input defaultValue="Suresh Babu" /></label>
-          <label><span>Mobile number</span><input defaultValue="98470 12840" /></label>
-          <label><span>District</span><select defaultValue="Ernakulam">{districts.map(item => <option key={item}>{item}</option>)}</select></label>
+          <label><span>Employee ID</span><input defaultValue={employeeId ? employee.id : "BMG-NEW"} /></label>
+          <label><span>Full name</span><input defaultValue={employeeId ? employee.name : ""} placeholder="Employee name" /></label>
+          <label><span>Mobile number</span><input defaultValue={employeeId ? employee.phone : ""} /></label>
+          <label><span>District</span><select defaultValue={employee.district}>{districts.map(item => <option key={item}>{item}</option>)}</select></label>
           <label><span>Joining date</span><input type="date" defaultValue="2026-09-10" /></label>
           <label><span>Employment status</span><select><option>Active</option><option>Reliever</option><option>On leave</option><option>Exit initiated</option></select></label>
         </div>
@@ -51,14 +62,15 @@ export function EmployeeFormScreen({ onBack, onImport }: { onBack: () => void; o
       </Panel>
       <Panel title="Pay and statutory profile" description="Employee settings override organization, client and site defaults.">
         <div className="form-grid">
-          <label><span>Pay basis</span><select value={payBasis} onChange={event => setPayBasis(event.target.value)}><option>Monthly salary</option><option>Fixed duty rate</option></select></label>
-          <label><span>{payBasis === "Monthly salary" ? "Monthly salary" : "Default duty rate"}</span><div className="input-prefix"><b>₹</b><input type="number" defaultValue={payBasis === "Monthly salary" ? "16000" : "650"} /></div></label>
-          <label><span>Salary denominator</span><select><option>Scheduled working days</option><option>Organization payable days</option></select></label>
+          <label><span>Pay basis</span><select value={payBasis} onChange={event => { const basis=event.target.value as PayBasis; setPayBasis(basis); setAmount(basis==="monthly"?16000:650); }}><option value="monthly">Monthly salary</option><option value="daily">Fixed daily rate</option><option value="site">Site-wise rate</option></select></label>
+          {payBasis!=="site" ? <label><span>{payBasis === "monthly" ? "Monthly salary" : "Rate per duty"}</span><div className="input-prefix"><b>₹</b><input type="number" min="1" value={amount} onChange={event=>setAmount(Number(event.target.value))} /></div></label> : <div className="site-rate-callout"><Buildings/><span><strong>Rate resolved per duty</strong><small>Post override, then site default. Missing rates block payroll.</small></span></div>}
+          <label><span>Salary denominator</span><select value={payableDays} onChange={event=>setPayableDays(Number(event.target.value))} disabled={payBasis!=="monthly"}><option value="26">26 scheduled payable days</option><option value="30">30 organization days</option><option value="31">Calendar days</option></select></label>
           <label><span>Payment method</span><select><option>Bank transfer</option><option>Cash</option></select></label>
+          <label><span>Effective from</span><input type="date" value={effectiveFrom} onChange={event=>setEffectiveFrom(event.target.value)}/></label>
         </div>
-        <div className="toggle-list">
-          <label><input type="checkbox" defaultChecked /><span><strong>Provident Fund</strong><small>Enabled as an employee override</small></span></label>
-          <label><input type="checkbox" defaultChecked /><span><strong>ESI</strong><small>Enabled as an employee override</small></span></label>
+        <div className="form-grid statutory-selects">
+          <label><span>Provident Fund</span><select value={pfOverride} onChange={event=>setPfOverride(event.target.value as BenefitOverride)}><option value="inherit">Inherit from site</option><option value="enabled">Force enabled</option><option value="disabled">Force disabled</option></select><small>Employee exception takes precedence over the site.</small></label>
+          <label><span>ESI</span><select value={esiOverride} onChange={event=>setEsiOverride(event.target.value as BenefitOverride)}><option value="inherit">Inherit from site</option><option value="enabled">Force enabled</option><option value="disabled">Force disabled</option></select><small>Employee exception takes precedence over the site.</small></label>
         </div>
       </Panel>
       <Panel title="Opening balances and issue status" description="Balances may be entered manually or imported.">
@@ -74,16 +86,26 @@ export function EmployeeFormScreen({ onBack, onImport }: { onBack: () => void; o
   </>;
 }
 
-export function SiteConfigurationScreen({ onBack }: { onBack: () => void }) {
-  const [tab, setTab] = useState("Site profile");
+export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: { onBack: () => void; role:Role; siteName?:string|null; initialTab?:"profile"|"salary" }) {
+  const selectedSite = siteName ?? "Lulu Mall, Kochi";
+  const siteRecord = siteRecords.find(item => item.name === selectedSite) ?? siteRecords[0];
+  const { siteRules, postRules, updateSiteRule, updatePostRule } = usePayroll();
+  const existingSiteRule = siteRules.filter(rule=>rule.site===selectedSite).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+  const canManageSalary = role === "Owner" || role === "HR & Payroll";
+  const [tab, setTab] = useState(initialTab === "salary" && canManageSalary ? "Salary and benefits" : "Site profile");
   const [saved, setSaved] = useState(false);
-  const [latitude, setLatitude] = useState(10.027);
-  const [longitude, setLongitude] = useState(76.308);
-  const [radius, setRadius] = useState(120);
-  const [posts, setPosts] = useState([
-    { name: "Main gate", shift: "Day · 08:00–20:00", required: 2, duty: "1.00" },
-    { name: "Loading bay", shift: "Night · 20:00–08:00", required: 2, duty: "1.00" },
-    { name: "Control room", shift: "24-hour rotation", required: 2, duty: "1.00" },
+  const [latitude, setLatitude] = useState(siteRecord.lat);
+  const [longitude, setLongitude] = useState(siteRecord.lng);
+  const [radius, setRadius] = useState(siteRecord.radius);
+  const [siteRate, setSiteRate] = useState(existingSiteRule?.defaultDutyRate ?? 0);
+  const [scheme, setScheme] = useState<BenefitScheme>(existingSiteRule?.scheme ?? "salary-only");
+  const [salaryEffectiveFrom, setSalaryEffectiveFrom] = useState("2026-09-01");
+  const latestPostRate=(post:string):number|""=>postRules.filter(rule=>rule.site===selectedSite&&rule.post===post).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0]?.dutyRate ?? "";
+  const secondPost=selectedSite==="Aster Medcity"?"Emergency":"Loading bay";
+  const [posts, setPosts] = useState<Array<{name:string;shift:string;required:number;duty:string;rate:number|""}>>([
+    { name: "Main gate", shift: "Day · 08:00–20:00", required: 2, duty: "1.00", rate:latestPostRate("Main gate") },
+    { name: secondPost, shift: "Night · 20:00–08:00", required: 2, duty: "1.00", rate:latestPostRate(secondPost) },
+    { name: "Control room", shift: "24-hour rotation", required: 2, duty: "1.00", rate:latestPostRate("Control room") },
   ]);
   const locate = () => navigator.geolocation?.getCurrentPosition(result => {
     setLatitude(Number(result.coords.latitude.toFixed(6)));
@@ -92,26 +114,27 @@ export function SiteConfigurationScreen({ onBack }: { onBack: () => void }) {
 
   return <>
     <PageHeader title="Site and post configuration" description="Location, staffing, benefit inheritance and attendance controls."
-      actions={<><BackButton onBack={onBack}/><button className="primary-button" onClick={() => setSaved(true)}><FloppyDisk />Save configuration</button></>} />
+      actions={<><BackButton onBack={onBack}/><button className="primary-button" onClick={() => { if(canManageSalary){ updateSiteRule({ site:selectedSite, effectiveFrom:salaryEffectiveFrom, defaultDutyRate:siteRate||undefined, scheme }); posts.forEach(post=>updatePostRule(post.rate ? { site:selectedSite, post:post.name, effectiveFrom:salaryEffectiveFrom, dutyRate:Number(post.rate) } : null, selectedSite, post.name, salaryEffectiveFrom)); } setSaved(true); }}><FloppyDisk />Save configuration</button></>} />
     {saved && <SavedNotice>Site configuration saved with its override sources.</SavedNotice>}
-    <div className="tabs-row workflow-tabs">{["Site profile", "Posts and shifts", "Geofence and attendance", "Benefit defaults"].map(item => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
+    <div className="tabs-row workflow-tabs">{["Site profile", "Posts and shifts", "Geofence and attendance", ...(canManageSalary?["Salary and benefits"]:[])].map(item => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
     {tab === "Site profile" && <Panel title="Client location" description="The client contract remains separate from operational posts."><div className="form-grid padded-form">
-      <label><span>Client</span><select defaultValue="Lulu Group"><option>Lulu Group</option><option>TCS</option><option>Aster DM Healthcare</option></select></label>
-      <label><span>Site name</span><input defaultValue="Lulu Mall, Kochi" /></label>
-      <label><span>District</span><select defaultValue="Ernakulam">{districts.map(item => <option key={item}>{item}</option>)}</select></label>
+      <label><span>Client</span><select defaultValue={siteRecord.client}><option>{siteRecord.client}</option><option>Lulu Group</option><option>TCS</option><option>Aster DM Healthcare</option></select></label>
+      <label><span>Site name</span><input defaultValue={selectedSite} /></label>
+      <label><span>District</span><select defaultValue={siteRecord.district}>{districts.map(item => <option key={item}>{item}</option>)}</select></label>
       <label><span>Site code</span><input defaultValue="SITE-EKM-014" /></label>
       <label><span>Contract start</span><input type="date" defaultValue="2026-01-01" /></label>
       <label><span>Operations contact</span><input defaultValue="Site Manager · 98470 33445" /></label>
     </div></Panel>}
-    {tab === "Posts and shifts" && <Panel title="Configured posts" description="Duty quantity, required headcount and rotation are editable per post." action={<button className="secondary-button compact" onClick={() => setPosts(current => [...current, { name: "New post", shift: "Day · 08:00–20:00", required: 1, duty: "1.00" }])}><Plus />Add post</button>}>
-      <div className="editable-list">{posts.map((post, index) => <div className="editable-row" key={index}>
+    {tab === "Posts and shifts" && <Panel title="Configured posts" description={canManageSalary?"Duty quantity, staffing and optional salary override are editable per post.":"Duty quantity, required headcount and rotation are editable per post."} action={<button className="secondary-button compact" onClick={() => setPosts(current => [...current, { name: "New post", shift: "Day · 08:00–20:00", required: 1, duty: "1.00", rate:"" }])}><Plus />Add post</button>}>
+      <div className="editable-list">{posts.map((post, index) => <div className={canManageSalary?"editable-row salary-fields":"editable-row"} key={index}>
         <input value={post.name} onChange={event => setPosts(current => current.map((item, row) => row === index ? { ...item, name: event.target.value } : item))} aria-label={`Post ${index + 1} name`} />
         <select value={post.shift} onChange={event => setPosts(current => current.map((item, row) => row === index ? { ...item, shift: event.target.value } : item))}><option>Day · 08:00–20:00</option><option>Night · 20:00–08:00</option><option>24-hour rotation</option><option>Flexible</option></select>
         <input type="number" value={post.required} onChange={event => setPosts(current => current.map((item, row) => row === index ? { ...item, required: Number(event.target.value) } : item))} aria-label="Required headcount" />
         <select value={post.duty} onChange={event => setPosts(current => current.map((item, row) => row === index ? { ...item, duty: event.target.value } : item))}><option>0.25</option><option>0.50</option><option>0.75</option><option>1.00</option><option>1.50</option></select>
+        {canManageSalary&&<input type="number" min="0" value={post.rate} placeholder="Site rate" onChange={event=>setPosts(current=>current.map((item,row)=>row===index?{...item,rate:event.target.value===""?"":Number(event.target.value)}:item))} aria-label={`${post.name} duty rate override`}/>}
         <button className="icon-button" onClick={() => setPosts(current => current.filter((_, row) => row !== index))} aria-label={`Remove ${post.name}`}><Trash /></button>
       </div>)}</div>
-      <div className="field-key"><span>Post name</span><span>Shift pattern</span><span>Required</span><span>Duty unit</span></div>
+      <div className={canManageSalary?"field-key salary-fields":"field-key"}><span>Post name</span><span>Shift pattern</span><span>Required</span><span>Duty unit</span>{canManageSalary&&<span>Rate override</span>}<span/></div>
     </Panel>}
     {tab === "Geofence and attendance" && <div className="split-layout">
       <Panel className="geofence-editor">
@@ -135,54 +158,58 @@ export function SiteConfigurationScreen({ onBack }: { onBack: () => void }) {
         <div className="toggle-list compact-toggles"><label><input type="checkbox"/><span><strong>Allow shared devices</strong><small>Every punch still requires employee identity</small></span></label><label><input type="checkbox" defaultChecked/><span><strong>Flag mock-location signals</strong><small>Route suspicious punches for HR review</small></span></label></div>
       </Panel>
     </div>}
-    {tab === "Benefit defaults" && <Panel title="Default statutory profile" description="These rules apply unless a post or employee override is active.">
-      <div className="scheme-choice"><label><input type="radio" name="scheme"/><span><strong>Salary only</strong><small>No PF or ESI at this site</small></span></label><label><input type="radio" name="scheme"/><span><strong>Salary + ESI</strong><small>ESI applies to eligible earnings</small></span></label><label><input type="radio" name="scheme" defaultChecked/><span><strong>Salary + ESI + PF</strong><small>Both contributions apply</small></span></label></div>
-      <div className="inheritance-chain"><strong>Current source</strong><div><span>Organization</span><b>›</b><span>Client</span><b>›</b><span className="active-rule">Site override</span><b>›</b><span>Post</span><b>›</b><span>Employee</span></div><p>The most specific effective rule wins and stays visible in the payroll calculation audit.</p></div>
-    </Panel>}
+    {tab === "Salary and benefits" && canManageSalary && <div className="split-layout salary-config-layout">
+      <Panel title="Site salary rule" description="Used by employees whose pay basis is Site-wise."><div className="form-stack">
+        <label><span>Default rate per duty</span><div className="input-prefix"><b>₹</b><input type="number" min="0" value={siteRate} onChange={event=>setSiteRate(Number(event.target.value))}/></div><small>A post rate overrides this value for duties on that post.</small></label>
+        <label><span>Effective from</span><input type="date" value={salaryEffectiveFrom} onChange={event=>setSalaryEffectiveFrom(event.target.value)}/><small>Earlier duties retain the rule effective on their duty date.</small></label>
+      </div>
+      <div className="scheme-choice salary-scheme">{([
+        ["salary-only","Salary only","No PF or ESI at this site"],
+        ["esi","Salary + ESI","ESI applies to eligible earnings"],
+        ["pf-esi","Salary + ESI + PF","Both contributions apply"],
+      ] as const).map(item=><label key={item[0]}><input type="radio" name="site-scheme" checked={scheme===item[0]} onChange={()=>setScheme(item[0])}/><span><strong>{item[1]}</strong><small>{item[2]}</small></span></label>)}</div>
+      </Panel>
+      <Panel title="Effective statutory settings" description="Organization rules applied to eligible earnings."><div className="statutory-cards">
+        <div><span>Employee PF</span><strong>{statutorySettings.pfRate*100}%</strong><small>Monthly wage ceiling {rupees(statutorySettings.pfWageCeiling)}</small></div>
+        <div><span>Employee ESI</span><strong>{statutorySettings.esiRate*100}%</strong><small>Monthly eligibility ceiling {rupees(statutorySettings.esiWageCeiling)}</small></div>
+      </div><div className="rate-history"><strong>Rate history</strong>{siteRules.filter(rule=>rule.site===selectedSite).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom)).map(rule=><div key={rule.effectiveFrom}><span>{rule.effectiveFrom}</span><b>{rule.defaultDutyRate?`${rupees(rule.defaultDutyRate)} / duty`:"Rate missing"}</b><em>{rule.scheme==="pf-esi"?"PF + ESI":rule.scheme==="esi"?"ESI":"Salary only"}</em></div>)}</div></Panel>
+    </div>}
   </>;
 }
 
-type Allocation = { site: string; days: number; scheme: string; earnings: number };
-
-export function PayrollAllocationScreen({ onBack }: { onBack: () => void }) {
-  const [rows, setRows] = useState<Allocation[]>([
-    { site: "TCS Technopark", days: 10, scheme: "Salary + ESI + PF", earnings: 6154 },
-    { site: "Aster Medcity", days: 10, scheme: "Salary + ESI", earnings: 6154 },
-    { site: "Lulu Mall, Kochi", days: 10, scheme: "Salary only", earnings: 6154 },
-  ]);
+export function PayrollAllocationScreen({ employeeId: selectedEmployeeId, onBack }: { employeeId?: string | null; onBack: () => void }) {
+  const { getBreakdown } = usePayroll();
+  const [employeeId, setEmployeeId] = useState(selectedEmployeeId ?? "BMG-2274");
   const [approved, setApproved] = useState(false);
-  const totals = useMemo(() => rows.reduce((result, row) => {
-    const pf = row.scheme.includes("PF") ? Math.round(row.earnings * .12) : 0;
-    const esi = row.scheme.includes("ESI") ? Math.round(row.earnings * .0075) : 0;
-    return { days: result.days + row.days, earnings: result.earnings + row.earnings, pf: result.pf + pf, esi: result.esi + esi };
-  }, { days: 0, earnings: 0, pf: 0, esi: 0 }), [rows]);
+
+  useEffect(() => {
+    if (selectedEmployeeId) {
+      setEmployeeId(selectedEmployeeId);
+      setApproved(false);
+    }
+  }, [selectedEmployeeId]);
+
+  const employee = employeeRecords.find(item=>item.id===employeeId) ?? employeeRecords[0];
+  const breakdown = getBreakdown(employeeId);
 
   return <>
-    <PageHeader title="Multi-site payroll allocation" description="Rajeev Kumar · August 2026 · monthly salary ₹16,000"
-      actions={<><BackButton onBack={onBack}/><button className="primary-button" onClick={() => setApproved(true)}><CheckCircle />Approve allocation</button></>} />
+    <PageHeader title="Multi-site payroll allocation" description={`${employee.name} · August 2026 · calculated from approved duties`}
+      actions={<><select className="header-select" value={employeeId} onChange={event=>{setEmployeeId(event.target.value);setApproved(false)}} aria-label="Employee allocation">{employeeRecords.filter(item=>getBreakdown(item.id).duties>0).map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select><BackButton onBack={onBack}/><button className="primary-button" disabled={breakdown.exceptions.length>0} onClick={() => setApproved(true)}><CheckCircle />Approve allocation</button></>} />
     {approved && <SavedNotice>Allocation approved and added to the payroll audit trail.</SavedNotice>}
+    {breakdown.exceptions.length>0&&<div className="saved-notice payroll-blocked"><WarningCircle weight="fill"/>{breakdown.exceptions.length} configuration exception{breakdown.exceptions.length===1?"":"s"} must be resolved before approval.</div>}
     <StatStrip items={[
-      { icon: CalendarCheck, value: totals.days.toFixed(2), label: "Approved duties", note: "Across all sites" },
-      { icon: Wallet, value: `₹${totals.earnings.toLocaleString("en-IN")}`, label: "Allocated gross", note: "Working-day proration", tone: "green" },
-      { icon: ShieldCheck, value: `₹${totals.pf.toLocaleString("en-IN")}`, label: "Employee PF", note: "Eligible site segments", tone: "violet" },
-      { icon: ShieldCheck, value: `₹${totals.esi.toLocaleString("en-IN")}`, label: "Employee ESI", note: "Eligible site segments", tone: "orange" },
+      { icon: CalendarCheck, value: breakdown.duties.toFixed(2), label: "Approved duties", note: "Across all sites" },
+      { icon: Wallet, value: rupees(breakdown.gross), label: "Allocated gross", note: "Resolved duty rates", tone: "green" },
+      { icon: ShieldCheck, value: rupees(breakdown.pf), label: "Employee PF", note: "Eligible site earnings", tone: "violet" },
+      { icon: ShieldCheck, value: rupees(breakdown.esi), label: "Employee ESI", note: "Eligible site earnings", tone: "orange" },
     ]}/>
-    <Panel title="Site allocation" description="Each row calculates contributions using its own effective benefit profile." action={<button className="secondary-button compact" onClick={() => setRows(current => [...current, { site: sites[0], days: 0, scheme: "Salary only", earnings: 0 }])}><Plus />Add segment</button>}>
-      <div className="allocation-table"><div className="allocation-head"><span>Site</span><span>Duties</span><span>Benefit profile</span><span>Gross</span><span>PF</span><span>ESI</span><span>Net</span><span/></div>
-      {rows.map((row, index) => {
-        const pf = row.scheme.includes("PF") ? Math.round(row.earnings * .12) : 0;
-        const esi = row.scheme.includes("ESI") ? Math.round(row.earnings * .0075) : 0;
-        return <div className="allocation-row" key={index}>
-          <select value={row.site} onChange={event => setRows(current => current.map((item, i) => i === index ? { ...item, site: event.target.value } : item))}>{sites.map(site => <option key={site}>{site}</option>)}</select>
-          <input type="number" step="0.25" value={row.days} onChange={event => setRows(current => current.map((item, i) => i === index ? { ...item, days: Number(event.target.value) } : item))}/>
-          <select value={row.scheme} onChange={event => setRows(current => current.map((item, i) => i === index ? { ...item, scheme: event.target.value } : item))}><option>Salary only</option><option>Salary + ESI</option><option>Salary + ESI + PF</option></select>
-          <div className="money-input">₹<input type="number" value={row.earnings} onChange={event => setRows(current => current.map((item, i) => i === index ? { ...item, earnings: Number(event.target.value) } : item))}/></div>
-          <strong>₹{pf.toLocaleString("en-IN")}</strong><strong>₹{esi.toLocaleString("en-IN")}</strong><strong>₹{(row.earnings - pf - esi).toLocaleString("en-IN")}</strong>
-          <button className="icon-button" onClick={() => setRows(current => current.filter((_, i) => i !== index))} aria-label="Remove allocation"><Trash /></button>
-        </div>;
-      })}
-      <div className="allocation-total"><span>Total</span><strong>{totals.days.toFixed(2)}</strong><span/><strong>₹{totals.earnings.toLocaleString("en-IN")}</strong><strong>₹{totals.pf.toLocaleString("en-IN")}</strong><strong>₹{totals.esi.toLocaleString("en-IN")}</strong><strong>₹{(totals.earnings - totals.pf - totals.esi).toLocaleString("en-IN")}</strong><span/></div></div>
-      <div className="calculation-note"><Wallet/><span><strong>Proration rule</strong> Monthly salary is divided by scheduled payable working days. Fractional duty quantities are summed before the site allocation is calculated.</span></div>
+    <Panel title="Site allocation" description="Earnings and employee contributions are derived from the effective rule on every approved duty.">
+      <div className="allocation-table"><div className="allocation-head"><span>Site</span><span>Duties</span><span>Rate source</span><span>Gross</span><span>PF</span><span>ESI</span><span>Net</span></div>
+      {breakdown.sites.map(site=><div className="allocation-row calculated" key={site.site}>
+        <strong>{site.site}</strong><span>{site.duties.toFixed(2)}</span><span>{site.rateSources.join(" / ")} · {site.schemeLabel}</span><strong>{rupees(site.gross)}</strong><strong>{rupees(site.pf)}</strong><strong>{rupees(site.esi)}</strong><strong>{rupees(site.net)}</strong>
+      </div>)}
+      <div className="allocation-total calculated"><span>Total</span><strong>{breakdown.duties.toFixed(2)}</strong><span/><strong>{rupees(breakdown.gross)}</strong><strong>{rupees(breakdown.pf)}</strong><strong>{rupees(breakdown.esi)}</strong><strong>{rupees(breakdown.gross-breakdown.pf-breakdown.esi)}</strong></div></div>
+      <div className="calculation-note"><Wallet/><span><strong>Automatic calculation</strong> Monthly and fixed daily rates ignore site pay rates. Site-wise employees use the post override first, then the site default. Site benefits remain effective unless the employee has an explicit exception.</span></div>
     </Panel>
   </>;
 }
@@ -314,7 +341,7 @@ export function PenaltiesScreen({ onBack }: { onBack: () => void }) {
         {applied && <SavedNotice>Penalty created once and linked to the complaint record.</SavedNotice>}
         <button className="primary-button" disabled={duplicate || applied} onClick={() => setApplied(true)}><Wallet/>{applied ? "Penalty recorded" : "Create ₹500 deduction"}</button>
       </div></Panel>
-      <Panel title="Recent penalty ledger" description="Complaint-linked records prevent duplicate deductions."><div className="penalty-ledger"><div><PersonCell name="Rajeev Kumar" id="BMG-1988"/><span>CL-1082</span><strong>₹500</strong><Status tone="success">Applied once</Status></div><div><PersonCell name="Anzar M" id="BMG-2031"/><span>CL-1068</span><strong>₹500</strong><Status tone="neutral">Recovered</Status></div></div></Panel>
+      <Panel title="Recent penalty ledger" description="Complaint-linked records prevent duplicate deductions."><div className="penalty-ledger"><div className="penalty-ledger-row"><PersonCell name="Rajeev Kumar" id="BMG-1988"/><Status tone="success">Applied once</Status><div className="penalty-ledger-meta"><span>CL-1082</span><strong>₹500</strong></div></div><div className="penalty-ledger-row"><PersonCell name="Anzar M" id="BMG-2031"/><Status tone="neutral">Recovered</Status><div className="penalty-ledger-meta"><span>CL-1068</span><strong>₹500</strong></div></div></div></Panel>
     </div>
   </>;
 }
@@ -350,12 +377,25 @@ const workflowConfig: Record<WorkflowKind, { title: string; description: string;
   sop: { title: "Create site SOP", description: "Publish versioned post instructions and acknowledgement rules.", submit: "Publish SOP", icon: FileText },
 };
 
-export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; onBack: () => void }) {
+export function DetailedWorkflowScreen({ kind, onBack, role = "Owner" }: { kind: WorkflowKind; onBack: () => void; role?:Role }) {
+  const { employeeRules, siteRules, postRules } = usePayroll();
   const config = workflowConfig[kind];
   const Icon = config.icon;
   const [saved, setSaved] = useState(false);
   const [duty, setDuty] = useState("1.00");
+  const [employeeId, setEmployeeId] = useState("BMG-1840");
+  const [assignmentSite, setAssignmentSite] = useState(sites[0]);
+  const [assignmentPost, setAssignmentPost] = useState("Main gate");
+  const [assignmentDate, setAssignmentDate] = useState("2026-09-10");
   const [kit, setKit] = useState(new Set(kitItems));
+  const effectiveEmployeeRule=employeeRules.filter(item=>item.employeeId===employeeId&&item.effectiveFrom<=assignmentDate).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+  const effectiveSiteRule=siteRules.filter(item=>item.site===assignmentSite&&item.effectiveFrom<=assignmentDate).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+  const effectivePostRule=postRules.filter(item=>item.site===assignmentSite&&item.post===assignmentPost&&item.effectiveFrom<=assignmentDate).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+  const resolvedSource=effectiveEmployeeRule?.basis==="monthly"?"Monthly":effectiveEmployeeRule?.basis==="daily"?"Daily":effectivePostRule?"Post":effectiveSiteRule?.defaultDutyRate?"Site":"Missing";
+  const resolvedRate=effectiveEmployeeRule?.basis==="monthly"?(effectiveEmployeeRule.monthlySalary??0)/effectiveEmployeeRule.payableDays:effectiveEmployeeRule?.basis==="daily"?(effectiveEmployeeRule.dailyRate??0):effectivePostRule?.dutyRate??effectiveSiteRule?.defaultDutyRate??0;
+  const canSeeSalary=role==="Owner"||role==="HR & Payroll";
+  const pfEnabled=effectiveEmployeeRule?.pfOverride==="enabled"||(effectiveEmployeeRule?.pfOverride==="inherit"&&effectiveSiteRule?.scheme==="pf-esi");
+  const esiEnabled=effectiveEmployeeRule?.esiOverride==="enabled"||(effectiveEmployeeRule?.esiOverride==="inherit"&&(effectiveSiteRule?.scheme==="pf-esi"||effectiveSiteRule?.scheme==="esi"));
   const toggleKit = (item: string) => setKit(current => {
     const next = new Set(current);
     if (next.has(item)) next.delete(item); else next.add(item);
@@ -367,11 +407,11 @@ export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; o
       <Panel className="workflow-form-panel">
         <div className="workflow-form-title"><span className="small-icon blue"><Icon/></span><div><strong>{config.title}</strong><small>Required fields are retained in the audit history.</small></div></div>
         <div className="form-grid padded-form">
-          {kind !== "complaint" && kind !== "sop" && <label><span>Employee</span><select>{employees.map(item => <option key={item}>{item}</option>)}</select></label>}
-          <label><span>{kind === "complaint" ? "Client" : "Site"}</span><select>{kind === "complaint" && <option>Lulu Group</option>}{sites.map(item => <option key={item}>{item}</option>)}</select></label>
-          {(kind === "assignment" || kind === "attendance") && <label><span>Post</span><select><option>Main gate</option><option>Loading bay</option><option>Control room</option></select></label>}
-          {kind !== "uniform" && <label><span>{kind === "sop" ? "Effective date" : "Date"}</span><input type="date" defaultValue="2026-09-10"/></label>}
-          {kind === "assignment" && <><label><span>Shift</span><select><option>Day · 08:00–20:00</option><option>Night · 20:00–08:00</option><option>24-hour duty</option></select></label><label><span>Duty quantity</span><select value={duty} onChange={event => setDuty(event.target.value)}><option>0.25</option><option>0.50</option><option>0.75</option><option>1.00</option><option>1.50</option></select></label><label><span>Pay rule</span><select><option>Employee monthly salary</option><option>Site daily rate · ₹650</option><option>Post daily rate · ₹750</option></select></label></>}
+          {kind !== "complaint" && kind !== "sop" && <label><span>Employee</span><select value={kind==="assignment"?employeeId:undefined} onChange={kind==="assignment"?event=>setEmployeeId(event.target.value):undefined}>{employeeRecords.map(item => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>}
+          <label><span>{kind === "complaint" ? "Client" : "Site"}</span><select value={kind==="assignment"?assignmentSite:undefined} onChange={kind==="assignment"?event=>setAssignmentSite(event.target.value):undefined}>{kind === "complaint" && <option>Lulu Group</option>}{sites.map(item => <option key={item}>{item}</option>)}</select></label>
+          {(kind === "assignment" || kind === "attendance") && <label><span>Post</span><select value={kind==="assignment"?assignmentPost:undefined} onChange={kind==="assignment"?event=>setAssignmentPost(event.target.value):undefined}><option>Main gate</option><option>Loading bay</option><option>Control room</option><option>Emergency</option></select></label>}
+          {kind !== "uniform" && <label><span>{kind === "sop" ? "Effective date" : "Date"}</span><input type="date" value={kind==="assignment"?assignmentDate:undefined} defaultValue={kind==="assignment"?undefined:"2026-09-10"} onChange={kind==="assignment"?event=>setAssignmentDate(event.target.value):undefined}/></label>}
+          {kind === "assignment" && <><label><span>Shift</span><select><option>Day · 08:00–20:00</option><option>Night · 20:00–08:00</option><option>24-hour duty</option></select></label><label><span>Duty quantity</span><select value={duty} onChange={event => setDuty(event.target.value)}><option>0.25</option><option>0.50</option><option>0.75</option><option>1.00</option><option>1.50</option></select></label><div className={`site-rate-callout ${resolvedSource==="Missing"?"warning":""}`}><Wallet/><span><strong>{resolvedSource==="Missing"?"Salary rate missing":`${resolvedSource} pay rule`}</strong><small>{canSeeSalary&&resolvedRate?`${rupees(resolvedRate)} per duty · `:""}Resolved automatically for this assignment</small></span></div></>}
           {kind === "attendance" && <><label><span>Punch-in time</span><input type="time" defaultValue="08:03"/></label><label><span>Duty quantity</span><select value={duty} onChange={event => setDuty(event.target.value)}><option>0.25</option><option>0.50</option><option>0.75</option><option>1.00</option><option>1.50</option></select></label><label><span>Correction reason</span><select><option>Device or network failure</option><option>Supervisor verified presence</option><option>Incorrect shift mapping</option></select></label></>}
           {kind === "uniform" && <><label><span>Recovery plan</span><select><option>Full upfront · ₹1,960</option><option>₹1,000 upfront + ₹1,200 salary</option><option>Full salary deduction · ₹2,600</option></select></label><label><span>Issue date</span><input type="date" defaultValue="2026-09-10"/></label></>}
           {kind === "inspection" && <><label><span>Visit time</span><input type="time" defaultValue="13:00"/></label><label><span>Result</span><select><option>Compliant</option><option>Follow-up required</option><option>Critical exception</option></select></label><label><span>Follow-up owner</span><select><option>District operations</option><option>HR</option><option>Client manager</option></select></label></>}
@@ -384,7 +424,7 @@ export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; o
         <div className="form-footer"><button className="secondary-button" onClick={onBack}>Cancel</button><button className="primary-button" onClick={() => setSaved(true)}><CheckCircle/>{saved ? "Saved" : config.submit}</button></div>
       </Panel>
       <Panel title="Rule summary" description="Calculated before this record is saved."><div className="rule-summary">
-        {kind === "assignment" && <><div><span>Duty value</span><strong>{duty}</strong></div><div><span>Pay source</span><strong>Employee profile</strong></div><div><span>Benefit source</span><strong>Site override · PF + ESI</strong></div><p>A 24-hour configured assignment counts as one duty unless its post rule specifies otherwise.</p></>}
+        {kind === "assignment" && <><div><span>Duty value</span><strong>{duty}</strong></div><div><span>Pay source</span><strong>{resolvedSource}{canSeeSalary&&resolvedRate?` · ${rupees(resolvedRate)}`:""}</strong></div><div><span>Benefits</span><strong>{pfEnabled&&esiEnabled?"PF + ESI":esiEnabled?"ESI":pfEnabled?"PF":"Salary only"}</strong></div>{resolvedSource==="Missing"&&<div className="inline-alert warning"><WarningCircle/><span>Assignment can be saved, but payroll will be blocked until the site or post rate is configured.</span></div>}<p>A 24-hour configured assignment counts as one duty unless its post rule specifies otherwise.</p></>}
         {kind === "attendance" && <><div><span>Recorded duty</span><strong>{duty}</strong></div><div><span>Approval</span><strong>HR required</strong></div><div><span>Audit state</span><strong>Original retained</strong></div><p>The original punch is never overwritten; the correction is added as a separate approved record.</p></>}
         {kind === "uniform" && <><div><span>Items selected</span><strong>{kit.size} / 12</strong></div><div><span>Upfront payment</span><strong>₹1,960</strong></div><div><span>Salary recovery</span><strong>₹0</strong></div><p>Any remaining recovery balance will block exit clearance immediately.</p></>}
         {kind === "inspection" && <><div><span>GPS verification</span><strong>Required</strong></div><div><span>Checklist</span><strong>4 controls</strong></div><div><span>Follow-up SLA</span><strong>24 hours</strong></div><p>The visit appears in the route board after location and checklist verification.</p></>}

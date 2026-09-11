@@ -1,58 +1,323 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowRight, CheckCircle, Coins, DownloadSimple, Package, Plus, Receipt,
+  ArrowRight, CalendarCheck, CheckCircle, Coins, DownloadSimple, Package, Plus, Receipt,
   ShieldCheck, TShirt, UploadSimple, Wallet, WarningCircle,
 } from "@phosphor-icons/react";
-import { payrollRows, rupees, uniformKit, uniformPlans } from "@/lib/mock-data";
+import { employees, lateAndAbsent, rupees, uniformKit, uniformPlans } from "@/lib/mock-data";
+import { payBasisLabel } from "@/lib/payroll-calculator";
 import {
   DefRows, DetailDrawer, PageHeader, Panel, PersonCell, ProgressBar,
   StatStrip, Status, Timeline,
 } from "@/components/shared/screen-elements";
 import { useToast } from "@/components/shared/toast-context";
+import { usePayroll } from "@/components/shared/payroll-context";
+import { EmployeeSalaryBreakdownModal } from "@/features/payroll/employee-salary-breakdown";
 
-export function PayrollScreen({ onAllocation }: { onAllocation: () => void }) {
-  const notify=useToast();
-  const [stage,setStage]=useState(2);
-  const [paid,setPaid]=useState(false);
-  const [selected,setSelected]=useState(payrollRows[0]);
-  const stages=["Attendance","Calculation","Review","Approval","Payment"];
+const stages = ["Attendance", "Calculation", "Review", "Approval", "Payment"] as const;
 
-  function advance() {
-    if(stage<4){ setStage(stage+1); return; }
-    setPaid(true);
-    notify("August 2026 payroll marked as paid · bank file generated");
+const stageDescriptions = [
+  "Confirm approved duties before salary calculation begins.",
+  "Resolve pay rates and statutory rules for every approved duty.",
+  "Inspect employee totals and open site-wise breakdowns.",
+  "Sign off the payroll register when every exception is cleared.",
+  "Release net wages and preserve the August 2026 snapshot.",
+];
+
+const advanceLabels = [
+  "Confirm attendance",
+  "Run calculation",
+  "Continue to approval",
+  "Proceed to payment",
+  "Mark paid",
+];
+
+type PayrollRow = { employee: typeof employees[number]; breakdown: ReturnType<ReturnType<typeof usePayroll>["getBreakdown"]> };
+
+function PayrollStageStats({ stage, rows, totals, exceptions, paid }: {
+  stage: number;
+  rows: PayrollRow[];
+  totals: { gross: number; statutory: number; other: number; net: number };
+  exceptions: number;
+  paid: boolean;
+}) {
+  const dutyTotal = rows.reduce((sum, row) => sum + row.breakdown.duties, 0);
+  const readyCount = rows.filter(row => row.breakdown.exceptions.length === 0).length;
+  const reviewCount = rows.length - readyCount;
+
+  if (stage === 0) {
+    return <StatStrip items={[
+      { icon: CalendarCheck, value: dutyTotal.toFixed(2), label: "Approved duties", note: "Across payable employees" },
+      { icon: Wallet, value: String(rows.length), label: "In payroll run", note: "With approved attendance" },
+      { icon: WarningCircle, value: String(lateAndAbsent.length), label: "Attendance flags", note: "Late or absent today", tone: "orange" },
+      { icon: CheckCircle, value: "Locked", label: "Period status", note: "August 2026 duties", tone: "green" },
+    ]} />;
   }
 
-  return <>
-    <PageHeader title="Payroll" description="August 2026 · working-day salary with site-level contribution allocation."
-      actions={<><button className="secondary-button" onClick={onAllocation}>Allocation audit</button><button className="secondary-button" onClick={()=>notify("Payroll register exported as CSV")}><DownloadSimple/>Export register</button><button className="primary-button" disabled={paid} onClick={advance}>{stage<4?"Continue review":paid?"Payroll closed":"Mark paid"}<ArrowRight/></button></>}/>
-    {paid&&<div className="saved-notice" data-enter><CheckCircle weight="fill"/>August 2026 payroll is closed. 468 net payouts totalling ₹58.8L were released to the bank file.</div>}
-    <div className="stepper" data-enter>{stages.map((item,index)=><button key={item} className={index<stage?"done":index===stage?"current":""} onClick={()=>setStage(index)}><i>{index<stage?<CheckCircle weight="fill"/>:index+1}</i><span>{item}</span></button>)}</div>
-    <StatStrip items={[
-      {icon:Wallet,value:"₹72.8L",label:"Gross payroll",note:"468 employees"},
-      {icon:ShieldCheck,value:"₹8.6L",label:"PF and ESI",note:"Employee deductions",tone:"violet"},
-      {icon:Receipt,value:"₹5.4L",label:"Other deductions",note:"Advance, uniform, penalty",tone:"orange"},
-      {icon:WarningCircle,value:"3",label:"Exceptions",note:"Blocking approval",tone:"red"},
-    ]}/>
-    <div className="split-detail">
-      <Panel className="table-panel"><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Employee</th><th>Duties</th><th>Gross</th><th>PF</th><th>ESI</th><th>Other</th><th>Net</th><th>Status</th></tr></thead><tbody>
-        {payrollRows.map(row=><tr key={row.id} className={selected.id===row.id?"selected-row":""} tabIndex={0} onClick={()=>setSelected(row)} onKeyDown={event=>{if(event.key==="Enter")setSelected(row)}}><td><PersonCell name={row.employee} id={row.id}/></td><td>{row.duties}</td><td>{rupees(row.gross)}</td><td>{rupees(row.pf)}</td><td>{rupees(row.esi)}</td><td>{rupees(row.deductions)}</td><td><strong>{rupees(row.net)}</strong></td><td><Status tone={row.state==="Ready"?"success":"warning"}>{row.state}</Status></td></tr>)}
-      </tbody></table></div></Panel>
-      <Panel title={selected.employee} description={selected.id+" · calculation detail"} className="calc-panel">
-        <div className="formula-card"><span>Monthly salary</span><strong>₹{selected.gross===14615?"19,000":"16,000"}</strong><small>÷ 26 scheduled payable duties</small></div>
-        <div className="calc-lines">
-          <span><b>Approved duties</b><strong>{selected.duties.split(" ")[0]}</strong></span>
-          <span><b>Prorated gross</b><strong>{rupees(selected.gross)}</strong></span>
-          <span><b>Employee PF</b><strong>− {rupees(selected.pf)}</strong></span>
-          <span><b>Employee ESI</b><strong>− {rupees(selected.esi)}</strong></span>
-          <span><b>Other deductions</b><strong>− {rupees(selected.deductions)}</strong></span>
-          <span className="total"><b>Net payable</b><strong>{rupees(selected.net)}</strong></span>
+  if (stage === 1) {
+    return <StatStrip items={[
+      { icon: Wallet, value: rupees(totals.gross), label: "Calculated gross", note: "From resolved duty rates" },
+      { icon: ShieldCheck, value: String(rows.reduce((sum, row) => sum + row.breakdown.sites.length, 0)), label: "Site allocations", note: "Across all employees", tone: "violet" },
+      { icon: Receipt, value: rupees(totals.other), label: "Deductions loaded", note: "Advance, uniform, penalty", tone: "orange" },
+      { icon: WarningCircle, value: String(exceptions), label: "Config exceptions", note: exceptions ? "Needs correction" : "All rules resolved", tone: exceptions ? "red" : "green" },
+    ]} />;
+  }
+
+  if (stage === 3) {
+    return <StatStrip items={[
+      { icon: CheckCircle, value: String(readyCount), label: "Ready to approve", note: "No blocking exceptions", tone: "green" },
+      { icon: WarningCircle, value: String(reviewCount), label: "Needs review", note: reviewCount ? "Resolve before approval" : "All clear", tone: reviewCount ? "orange" : "green" },
+      { icon: Wallet, value: rupees(totals.net), label: "Net payable", note: `${rows.length} employees` },
+      { icon: ShieldCheck, value: rupees(totals.statutory), label: "PF and ESI", note: "Employee contributions", tone: "violet" },
+    ]} />;
+  }
+
+  if (stage === 4) {
+    return <StatStrip items={[
+      { icon: Wallet, value: rupees(totals.net), label: "Payment batch", note: paid ? "Snapshot saved" : "Awaiting release" },
+      { icon: CheckCircle, value: String(rows.length), label: "Employees", note: "Included in August 2026", tone: paid ? "green" : "orange" },
+      { icon: Receipt, value: rupees(totals.other), label: "Other deductions", note: "Already netted off" },
+      { icon: ShieldCheck, value: paid ? "Closed" : "Open", label: "Payroll period", note: paid ? "Calculations preserved" : "Ready to mark paid", tone: paid ? "green" : "violet" },
+    ]} />;
+  }
+
+  return <StatStrip items={[
+    { icon: Wallet, value: rupees(totals.gross), label: "Gross payroll", note: `${rows.length} calculated employees` },
+    { icon: ShieldCheck, value: rupees(totals.statutory), label: "PF and ESI", note: "Eligible site earnings", tone: "violet" },
+    { icon: Receipt, value: rupees(totals.other), label: "Other deductions", note: "Advance, uniform, penalty", tone: "orange" },
+    { icon: WarningCircle, value: String(exceptions), label: "Exceptions", note: exceptions ? "Blocking approval" : "Ready for approval", tone: exceptions ? "red" : "green" },
+  ]} />;
+}
+
+function PayrollStagePanel({
+  stage,
+  rows,
+  totals,
+  exceptions,
+  paid,
+  onOpenEmployee,
+}: {
+  stage: number;
+  rows: PayrollRow[];
+  totals: { gross: number; statutory: number; other: number; net: number };
+  exceptions: number;
+  paid: boolean;
+  onOpenEmployee: (employee: { id: string; name: string }) => void;
+}) {
+  if (stage === 0) {
+    return (
+      <Panel title="Attendance lock" description="Only approved duties in August 2026 move into payroll calculation." className="table-panel">
+        <div className="data-table-wrap">
+          <table className="data-table payroll-employee-table">
+            <thead><tr><th>Employee</th><th>Approved duties</th><th>Sites</th><th>Attendance note</th><th>Payroll status</th></tr></thead>
+            <tbody>
+              {rows.map(row => {
+                const flag = lateAndAbsent.find(item => item.id === row.employee.id);
+                return (
+                  <tr key={row.employee.id}>
+                    <td><PersonCell name={row.employee.name} id={row.employee.id} /></td>
+                    <td>{row.breakdown.duties.toFixed(2)}</td>
+                    <td>{row.breakdown.sites.length}</td>
+                    <td>{flag ? `${flag.state}${flag.delay && flag.delay !== "—" ? ` · ${flag.delay}` : ""}` : "All shifts approved"}</td>
+                    <td><Status tone="success">Included</Status></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-        <div className="inheritance-note"><ShieldCheck/><span>PF + ESI inherited from employee profile.<button onClick={onAllocation}>View site allocation</button></span></div>
       </Panel>
+    );
+  }
+
+  if (stage === 1) {
+    return (
+      <Panel title="Salary calculation" description="Every duty resolves a rate source, benefit scheme, and gross amount." className="table-panel">
+        <div className="data-table-wrap">
+          <table className="data-table payroll-employee-table">
+            <thead><tr><th>Employee</th><th>Pay basis</th><th>Duties</th><th>Rate sources</th><th>Gross</th><th>Status</th></tr></thead>
+            <tbody>
+              {rows.map(row => (
+                <tr key={row.employee.id} className="clickable-row" tabIndex={0} onClick={() => onOpenEmployee({ id: row.employee.id, name: row.employee.name })} onKeyDown={event => { if (event.key === "Enter") onOpenEmployee({ id: row.employee.id, name: row.employee.name }); }}>
+                  <td><PersonCell name={row.employee.name} id={row.employee.id} /></td>
+                  <td>{payBasisLabel(row.breakdown.payBasis)}</td>
+                  <td>{row.breakdown.duties.toFixed(2)}</td>
+                  <td>{row.breakdown.sites.flatMap(site => site.rateSources).filter((value, index, list) => list.indexOf(value) === index).join(" / ") || "—"}</td>
+                  <td>{rupees(row.breakdown.gross)}</td>
+                  <td><Status tone={row.breakdown.exceptions.length ? "warning" : "success"}>{row.breakdown.exceptions.length ? "Exception" : "Calculated"}</Status></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="calculation-note payroll-stage-note"><Wallet /><span><strong>Automatic calculation</strong> Monthly and fixed daily rates ignore site pay rates. Site-wise employees use the post override first, then the site default.</span></div>
+      </Panel>
+    );
+  }
+
+  if (stage === 3) {
+    const blocked = rows.filter(row => row.breakdown.exceptions.length > 0);
+    return (
+      <div className="payroll-stage-stack">
+        <Panel title="Approval summary" description="Review the register totals before releasing payment.">
+          <DefRows rows={[
+            { label: "Gross payroll", value: rupees(totals.gross), mono: true },
+            { label: "PF and ESI", value: rupees(totals.statutory), mono: true },
+            { label: "Other deductions", value: rupees(totals.other), mono: true },
+            { label: "Net payable", value: rupees(totals.net), mono: true, total: true },
+          ]} />
+        </Panel>
+        <Panel title="Employee readiness" description={exceptions ? "Resolve every configuration exception before approval." : "Every calculated employee is ready for approval."} className="table-panel">
+          <div className="data-table-wrap">
+            <table className="data-table payroll-employee-table">
+              <thead><tr><th>Employee</th><th>Net</th><th>Exceptions</th><th>Approval</th></tr></thead>
+              <tbody>
+                {rows.map(row => (
+                  <tr key={row.employee.id} className="clickable-row" tabIndex={0} onClick={() => onOpenEmployee({ id: row.employee.id, name: row.employee.name })} onKeyDown={event => { if (event.key === "Enter") onOpenEmployee({ id: row.employee.id, name: row.employee.name }); }}>
+                    <td><PersonCell name={row.employee.name} id={row.employee.id} /></td>
+                    <td><strong>{rupees(row.breakdown.net)}</strong></td>
+                    <td>{row.breakdown.exceptions.length}</td>
+                    <td><Status tone={row.breakdown.exceptions.length ? "warning" : "success"}>{row.breakdown.exceptions.length ? "Hold" : "Approve"}</Status></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+        {blocked.length > 0 && (
+          <div className="payroll-exception" role="alert">
+            <WarningCircle weight="fill" />
+            <div>
+              <strong>{blocked.length} employee{blocked.length === 1 ? "" : "s"} blocked approval</strong>
+              {blocked.map(row => <span key={row.employee.id}>{row.employee.name}: {row.breakdown.exceptions[0]?.message}</span>)}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (stage === 4) {
+    return (
+      <Panel title={paid ? "Payment completed" : "Payment release"} description={paid ? "August 2026 payroll is closed and preserved as a snapshot." : "Confirm the net batch before marking the period paid."}>
+        <DefRows rows={[
+          { label: "Employees in batch", value: rows.length, mono: true },
+          { label: "Gross payroll", value: rupees(totals.gross), mono: true },
+          { label: "Statutory deductions", value: rupees(totals.statutory), mono: true },
+          { label: "Other deductions", value: rupees(totals.other), mono: true },
+          { label: "Net payable", value: rupees(totals.net), mono: true, total: true },
+        ]} />
+        <div className="calculation-note payroll-stage-note">
+          {paid ? <CheckCircle weight="fill" /> : <Wallet />}
+          <span>
+            <strong>{paid ? "Batch released" : "Ready for bank release"}</strong>
+            {paid
+              ? "Employee calculations are frozen for August 2026. Reopen only through a correction workflow."
+              : "Mark paid to save the calculation snapshot and close the August 2026 payroll period."}
+          </span>
+        </div>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel title="Payroll review" description="Open any employee to inspect site-wise duties, deductions, and allocation." className="table-panel payroll-table-panel">
+      <div className="data-table-wrap">
+        <table className="data-table payroll-employee-table">
+          <thead><tr><th>Employee</th><th>Duties</th><th>Gross</th><th>PF</th><th>ESI</th><th>Other</th><th>Net</th><th>Status</th></tr></thead>
+          <tbody>
+            {rows.map(row => (
+              <tr key={row.employee.id} className="clickable-row" tabIndex={0} onClick={() => onOpenEmployee({ id: row.employee.id, name: row.employee.name })} onKeyDown={event => { if (event.key === "Enter") onOpenEmployee({ id: row.employee.id, name: row.employee.name }); }}>
+                <td><PersonCell name={row.employee.name} id={row.employee.id} /></td>
+                <td>{row.breakdown.duties.toFixed(2)}</td>
+                <td>{rupees(row.breakdown.gross)}</td>
+                <td>{rupees(row.breakdown.pf)}</td>
+                <td>{rupees(row.breakdown.esi)}</td>
+                <td>{rupees(row.breakdown.otherDeductions)}</td>
+                <td><strong>{rupees(row.breakdown.net)}</strong></td>
+                <td><Status tone={row.breakdown.exceptions.length ? "warning" : "success"}>{row.breakdown.exceptions.length ? "Review" : "Ready"}</Status></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+export function PayrollScreen({ onAllocation }: { onAllocation: (employeeId: string) => void }) {
+  const notify = useToast();
+  const { getBreakdown, closePeriod, isPeriodClosed } = usePayroll();
+  const rows = useMemo(() => employees.map(employee => ({ employee, breakdown: getBreakdown(employee.id) })).filter(row => row.breakdown.duties > 0), [getBreakdown]);
+  const paid = isPeriodClosed();
+  const [stage, setStage] = useState(paid ? 4 : 2);
+  const [maxStage, setMaxStage] = useState(paid ? 4 : 2);
+  const [modalEmployee, setModalEmployee] = useState<{ id: string; name: string } | null>(null);
+  const exceptions = rows.reduce((sum, row) => sum + row.breakdown.exceptions.length, 0);
+  const totals = rows.reduce((result, row) => ({
+    gross: result.gross + row.breakdown.gross,
+    statutory: result.statutory + row.breakdown.pf + row.breakdown.esi,
+    other: result.other + row.breakdown.otherDeductions,
+    net: result.net + row.breakdown.net,
+  }), { gross: 0, statutory: 0, other: 0, net: 0 });
+
+  useEffect(() => {
+    if (paid) {
+      setStage(4);
+      setMaxStage(4);
+    }
+  }, [paid]);
+
+  function goToStage(index: number) {
+    if (index <= maxStage) setStage(index);
+  }
+
+  function advance() {
+    if (stage < 4) {
+      const next = stage + 1;
+      setStage(next);
+      setMaxStage(current => Math.max(current, next));
+      notify(`${stages[next]} stage opened`);
+      return;
+    }
+    if (!closePeriod()) {
+      notify("Resolve payroll configuration exceptions before payment");
+      return;
+    }
+    notify("August 2026 payroll marked as paid · calculation snapshot saved");
+  }
+
+  const primaryDisabled = paid || (stage === 3 && exceptions > 0) || (stage === 4 && (paid || exceptions > 0));
+  const primaryLabel = paid ? "Payroll closed" : stage === 3 && exceptions > 0 ? "Resolve exceptions" : advanceLabels[stage];
+
+  return <>
+    <PageHeader
+      title="Payroll"
+      description={`August 2026 · ${stageDescriptions[stage]}`}
+      actions={<>
+        <button className="secondary-button" onClick={() => notify("Payroll register exported as CSV")}><DownloadSimple />Export register</button>
+        <button className="primary-button" disabled={primaryDisabled} onClick={advance}>{primaryLabel}<ArrowRight /></button>
+      </>}
+    />
+    {paid && <div className="saved-notice" data-enter><CheckCircle weight="fill" />August 2026 payroll is closed. Employee calculations are preserved as a snapshot.</div>}
+    <div className="stepper" data-enter>
+      {stages.map((item, index) => (
+        <button
+          key={item}
+          type="button"
+          className={index === stage ? "current" : index <= maxStage && index !== stage ? "done" : ""}
+          disabled={index > maxStage}
+          onClick={() => goToStage(index)}
+        >
+          <i>{index <= maxStage && index !== stage ? <CheckCircle weight="fill" /> : index + 1}</i>
+          <span>{item}</span>
+        </button>
+      ))}
     </div>
+    <PayrollStageStats stage={stage} rows={rows} totals={totals} exceptions={exceptions} paid={paid} />
+    <PayrollStagePanel stage={stage} rows={rows} totals={totals} exceptions={exceptions} paid={paid} onOpenEmployee={setModalEmployee} />
+    {modalEmployee && <EmployeeSalaryBreakdownModal employeeId={modalEmployee.id} employeeName={modalEmployee.name} onClose={() => setModalEmployee(null)} onAllocation={employeeId => { setModalEmployee(null); onAllocation(employeeId); }} />}
   </>;
 }
 

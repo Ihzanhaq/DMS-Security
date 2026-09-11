@@ -92,7 +92,7 @@ const roleNames: Record<Role, { name: string; initials: string }> = {
 
 const allowedInternalViews: Record<Exclude<Role, "Guard" | "Client">, AppView[]> = {
   Owner: [...internalNavigation.flatMap(group => group.items.map(item => item.view)), "employee-form", "site-config", "assignment-form", "attendance-correction", "payroll-allocation", "uniform-issue", "inspection-form", "complaint-form", "sop-form", "action-centre"],
-  "HR & Payroll": ["dashboard", "workforce", "employee-form", "attendance", "attendance-correction", "payroll", "payroll-allocation", "advances", "uniforms", "uniform-issue", "penalties", "exit-clearance", "complaints", "complaint-form", "reports", "imports", "settings", "action-centre"],
+  "HR & Payroll": ["dashboard", "workforce", "employee-form", "site-config", "attendance", "attendance-correction", "payroll", "payroll-allocation", "advances", "uniforms", "uniform-issue", "penalties", "exit-clearance", "complaints", "complaint-form", "reports", "imports", "settings", "action-centre"],
   "District Operations": ["dashboard", "workforce", "sites", "site-config", "deployment", "assignment-form", "attendance", "attendance-correction", "night-vigilance", "inspections", "inspection-form", "complaints", "complaint-form", "sops", "sop-form", "reports", "action-centre"],
   "Field Officer": ["dashboard", "sites", "deployment", "attendance", "night-vigilance", "inspections", "inspection-form", "complaints", "complaint-form", "sops", "action-centre"],
 };
@@ -108,6 +108,10 @@ function HrmsShell() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [quickAction, setQuickAction] = useState<string | null>(null);
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
+  const [allocationEmployeeId, setAllocationEmployeeId] = useState<string | null>(null);
+  const [selectedSite, setSelectedSite] = useState<string | null>(null);
+  const [siteInitialTab, setSiteInitialTab] = useState<"profile"|"salary">("profile");
   const [search, setSearch] = useState("");
   const contentRef = useRef<HTMLDivElement>(null);
   const notify = useToast();
@@ -179,6 +183,9 @@ function HrmsShell() {
   };
 
   const openAction = (name: string) => setQuickAction(name);
+  const openEmployeeForm = (employeeId:string|null) => { setEditingEmployeeId(employeeId); navigate("employee-form"); };
+  const openAllocationAudit = (employeeId?: string) => { setAllocationEmployeeId(employeeId ?? null); navigate("payroll-allocation"); };
+  const openSiteConfig = (site:string|null, tab:"profile"|"salary"="profile") => { setSelectedSite(site); setSiteInitialTab(tab); navigate("site-config"); };
   const submitSearch = (event: FormEvent) => {
     event.preventDefault();
     if (!search.trim()) return;
@@ -239,7 +246,7 @@ function HrmsShell() {
         </header>
 
         <div className="page" ref={contentRef}>
-          {renderView(view, role, navigate, openAction)}
+          {renderView(view, role, navigate, openAction, editingEmployeeId, openEmployeeForm, allocationEmployeeId, openAllocationAudit, selectedSite, openSiteConfig, siteInitialTab)}
         </div>
       </main>
 
@@ -248,17 +255,17 @@ function HrmsShell() {
   );
 }
 
-function renderView(view: AppView, role: Role, navigate: (view: string) => void, openAction: (name: string) => void) {
+function renderView(view: AppView, role: Role, navigate: (view: string) => void, openAction: (name: string) => void, editingEmployeeId:string|null, openEmployeeForm:(employeeId:string|null)=>void, allocationEmployeeId:string|null, openAllocationAudit:(employeeId?:string)=>void, selectedSite:string|null, openSiteConfig:(site:string|null,tab?:"profile"|"salary")=>void, siteInitialTab:"profile"|"salary") {
   if (view === "guard-vigilance") return <NightVigilanceScreen guardMode onBack={() => navigate("guard-home")} />;
   if (view.startsWith("guard-")) return <GuardPortal view={view} onNavigate={next => navigate(next)} />;
   if (view.startsWith("client-")) return <ClientPortal view={view} onNavigate={next => navigate(next)} />;
   switch (view) {
     case "dashboard": return <DashboardScreen onNavigate={navigate} />;
-    case "workforce": return <WorkforceScreen onNavigate={navigate} onCreate={() => navigate("employee-form")} onEdit={() => navigate("employee-form")} />;
-    case "sites": return <SitesScreen onCreate={() => navigate("site-config")} onConfigure={() => navigate("site-config")} />;
+    case "workforce": return <WorkforceScreen onNavigate={navigate} onCreate={() => openEmployeeForm(null)} onEdit={openEmployeeForm} />;
+    case "sites": return <SitesScreen onCreate={() => openSiteConfig(null)} onConfigure={site=>openSiteConfig(site)} />;
     case "deployment": return <DeploymentScreen onAssign={() => navigate("assignment-form")} />;
     case "attendance": return <AttendanceScreen onCorrect={() => navigate("attendance-correction")} />;
-    case "payroll": return <PayrollScreen onAllocation={() => navigate("payroll-allocation")} />;
+    case "payroll": return <PayrollScreen onAllocation={openAllocationAudit} />;
     case "advances": return <AdvancesScreen onCreate={() => openAction("Salary advance")} />;
     case "uniforms": return <UniformsScreen onIssue={() => navigate("uniform-issue")} onImport={() => navigate("imports")} />;
     case "inspections": return <InspectionsScreen onLog={() => navigate("inspection-form")} />;
@@ -267,14 +274,14 @@ function renderView(view: AppView, role: Role, navigate: (view: string) => void,
     case "reports": return <ReportsScreen />;
     case "imports": return <ImportsScreen />;
     case "settings": return <SettingsScreen />;
-    case "employee-form": return <EmployeeFormScreen onBack={() => navigate("workforce")} onImport={() => navigate("imports")} />;
-    case "site-config": return <SiteConfigurationScreen onBack={() => navigate("sites")} />;
-    case "payroll-allocation": return <PayrollAllocationScreen onBack={() => navigate("payroll")} />;
+    case "employee-form": return <EmployeeFormScreen employeeId={editingEmployeeId} onBack={() => navigate("workforce")} onImport={() => navigate("imports")} />;
+    case "site-config": return <SiteConfigurationScreen role={role} siteName={selectedSite} initialTab={siteInitialTab} onBack={() => navigate(role==="HR & Payroll"?"payroll":"sites")} />;
+    case "payroll-allocation": return <PayrollAllocationScreen employeeId={allocationEmployeeId} onBack={() => navigate("payroll")} />;
     case "night-vigilance": return <NightVigilanceScreen onBack={() => navigate("dashboard")} />;
     case "exit-clearance": return <ExitClearanceScreen onBack={() => navigate("workforce")} />;
     case "penalties": return <PenaltiesScreen onBack={() => navigate("payroll")} />;
     case "action-centre": return <ActionCentreScreen onBack={() => navigate("dashboard")} />;
-    case "assignment-form": return <DetailedWorkflowScreen kind="assignment" onBack={() => navigate("deployment")} />;
+    case "assignment-form": return <DetailedWorkflowScreen kind="assignment" role={role} onBack={() => navigate("deployment")} />;
     case "attendance-correction": return <DetailedWorkflowScreen kind="attendance" onBack={() => navigate("attendance")} />;
     case "uniform-issue": return <DetailedWorkflowScreen kind="uniform" onBack={() => navigate("uniforms")} />;
     case "inspection-form": return <DetailedWorkflowScreen kind="inspection" onBack={() => navigate("inspections")} />;

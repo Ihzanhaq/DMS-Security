@@ -1,9 +1,12 @@
-import type { Employee, Site, Skill } from "@/types/domain";
+import type {
+  ApprovedDuty, Employee, EmployeePayRule, PayrollDeduction, PostRateRule,
+  Site, SitePayRule, Skill, StatutorySettings,
+} from "@/types/domain";
 
 export const employees: Employee[] = [
-  { id:"BMG-1840", name:"Suresh Babu", initials:"SB", role:"Security Officer", district:"Ernakulam", site:"Lulu Mall, Kochi", shift:"Day", status:"Active", salary:16000, skills:["General security","Day book"], pf:true, esi:true, phone:"98470 12840" },
-  { id:"BMG-2274", name:"Fathima N", initials:"FN", role:"Security Officer", district:"Ernakulam", site:"Aster Medcity", shift:"Day", status:"Active", salary:17000, skills:["General security","Day book"], pf:false, esi:true, phone:"97462 41982" },
-  { id:"BMG-1988", name:"Rajeev Kumar", initials:"RK", role:"Senior Guard", district:"Thiruvananthapuram", site:"TCS Technopark", shift:"Night", status:"Active", salary:19000, skills:["Specialized","Day book","Driving"], pf:true, esi:true, phone:"94471 56301" },
+  { id:"BMG-1840", name:"Suresh Babu", initials:"SB", role:"Security Officer", district:"Ernakulam", site:"Lulu Mall, Kochi", shift:"Day", status:"Active", salary:16000, payBasis:"monthly", pfOverride:"inherit", esiOverride:"inherit", skills:["General security","Day book"], pf:true, esi:true, phone:"98470 12840" },
+  { id:"BMG-2274", name:"Fathima N", initials:"FN", role:"Security Officer", district:"Ernakulam", site:"Aster Medcity", shift:"Day", status:"Active", salary:0, payBasis:"site", pfOverride:"disabled", esiOverride:"inherit", skills:["General security","Day book"], pf:false, esi:true, phone:"97462 41982" },
+  { id:"BMG-1988", name:"Rajeev Kumar", initials:"RK", role:"Senior Guard", district:"Thiruvananthapuram", site:"TCS Technopark", shift:"Night", status:"Active", salary:19000, payBasis:"monthly", pfOverride:"inherit", esiOverride:"inherit", skills:["Specialized","Day book","Driving"], pf:true, esi:true, phone:"94471 56301" },
   { id:"BMG-1469", name:"Hareendrakumar K", initials:"HK", role:"Driver", district:"Kollam", site:"Travancore Medicity", shift:"Day", status:"Reliever", salary:0, dailyRate:750, skills:["Driving","General security"], pf:false, esi:false, phone:"95678 14329" },
   { id:"BMG-2031", name:"Anzar M", initials:"AM", role:"Security Officer", district:"Alappuzha", site:"Lake Palace Resort", shift:"Night", status:"Leave", salary:15000, skills:["General security"], pf:false, esi:true, phone:"70252 46810" },
   { id:"BMG-1778", name:"Shamnad C M", initials:"SC", role:"Security Officer", district:"Kottayam", site:"Caritas Hospital", shift:"Night", status:"Active", salary:15734, skills:["General security","Day book"], pf:true, esi:true, phone:"98952 67142" },
@@ -34,6 +37,83 @@ export const sites: Site[] = [
   { client:"Malabar Gold & Diamonds",   name:"Malabar Gold, Kozhikode",  district:"Kozhikode",          posts:10, staffed:10, coverage:100, scheme:"PF + ESI",    lat:11.24880, lng:75.78040, radius:60  },
   { client:"Sobha Developers",          name:"Sobha City Mall",          district:"Thrissur",           posts:14, staffed:13, coverage:93,  scheme:"ESI",         lat:10.52760, lng:76.21440, radius:110 },
   { client:"Skyline Builders",          name:"Skyline Apartments",       district:"Kannur",             posts:6,  staffed:5,  coverage:83,  scheme:"Salary only", lat:11.87450, lng:75.37040, radius:70  },
+];
+
+export const statutorySettings: StatutorySettings = {
+  pfRate: .12,
+  esiRate: .0075,
+  pfWageCeiling: 15000,
+  esiWageCeiling: 21000,
+};
+
+export const employeePayRules: EmployeePayRule[] = employees.map(employee => ({
+  employeeId: employee.id,
+  effectiveFrom: "2026-01-01",
+  basis: employee.payBasis ?? (employee.dailyRate ? "daily" : "monthly"),
+  monthlySalary: employee.salary || undefined,
+  dailyRate: employee.dailyRate,
+  payableDays: 26,
+  pfOverride: employee.pfOverride ?? (employee.pf ? "enabled" : "disabled"),
+  esiOverride: employee.esiOverride ?? (employee.esi ? "enabled" : "disabled"),
+}));
+
+export const sitePayRules: SitePayRule[] = [
+  { site:"Lulu Mall, Kochi", effectiveFrom:"2026-01-01", defaultDutyRate:650, scheme:"pf-esi" },
+  { site:"Lulu Mall, Kochi", effectiveFrom:"2026-08-01", defaultDutyRate:700, scheme:"pf-esi" },
+  { site:"TCS Technopark", effectiveFrom:"2026-01-01", defaultDutyRate:750, scheme:"pf-esi" },
+  { site:"Aster Medcity", effectiveFrom:"2026-01-01", defaultDutyRate:700, scheme:"esi" },
+  { site:"Aster Medcity", effectiveFrom:"2026-08-01", defaultDutyRate:750, scheme:"esi" },
+  { site:"Lake Palace Resort", effectiveFrom:"2026-01-01", defaultDutyRate:600, scheme:"salary-only" },
+  { site:"Caritas Hospital", effectiveFrom:"2026-01-01", defaultDutyRate:650, scheme:"pf-esi" },
+  { site:"Malabar Gold, Kozhikode", effectiveFrom:"2026-01-01", defaultDutyRate:725, scheme:"pf-esi" },
+  { site:"Sobha City Mall", effectiveFrom:"2026-01-01", defaultDutyRate:675, scheme:"esi" },
+  { site:"Skyline Apartments", effectiveFrom:"2026-01-01", defaultDutyRate:600, scheme:"salary-only" },
+  { site:"Travancore Medicity", effectiveFrom:"2026-01-01", defaultDutyRate:700, scheme:"salary-only" },
+];
+
+export const postRateRules: PostRateRule[] = [
+  { site:"Aster Medcity", post:"Emergency", effectiveFrom:"2026-08-01", dutyRate:825 },
+  { site:"TCS Technopark", post:"Control room", effectiveFrom:"2026-08-01", dutyRate:800 },
+];
+
+type DutySegment = { site:string; post:string; quantities:number[] };
+function makeDuties(employeeId:string, segments:DutySegment[]): ApprovedDuty[] {
+  let day = 1;
+  return segments.flatMap(segment => segment.quantities.map(quantity => {
+    const dutyDay=day++;
+    return {
+    id:`${employeeId}-${String(dutyDay).padStart(2,"0")}`,
+    employeeId,
+    date:`2026-08-${String(dutyDay).padStart(2,"0")}`,
+    site:segment.site,
+    post:segment.post,
+    quantity,
+    status:"approved" as const,
+  }; }));
+}
+
+export const approvedDuties: ApprovedDuty[] = [
+  ...makeDuties("BMG-1840", [{ site:"Lulu Mall, Kochi", post:"Main gate", quantities:Array(26).fill(1) }]),
+  ...makeDuties("BMG-2274", [
+    { site:"Aster Medcity", post:"Ward entrance", quantities:Array(11).fill(1) },
+    { site:"Aster Medcity", post:"Emergency", quantities:[1,.75] },
+    { site:"Lake Palace Resort", post:"Lobby", quantities:Array(12).fill(1) },
+  ]),
+  ...makeDuties("BMG-1988", [
+    { site:"TCS Technopark", post:"Block A", quantities:Array(10).fill(1) },
+    { site:"Aster Medcity", post:"Emergency", quantities:Array(10).fill(1) },
+  ]),
+  ...makeDuties("BMG-1469", [{ site:"Travancore Medicity", post:"Main gate", quantities:[...Array(12).fill(1),.5] }]),
+  ...makeDuties("BMG-2044", [{ site:"Malabar Gold, Kozhikode", post:"Control room", quantities:[...Array(22).fill(1),1.5] }]),
+  ...makeDuties("BMG-1902", [{ site:"Sobha City Mall", post:"Main gate", quantities:[...Array(25).fill(1),.75] }]),
+];
+
+export const payrollDeductions: PayrollDeduction[] = [
+  { id:"DED-1", employeeId:"BMG-1840", period:"2026-08", kind:"uniform", label:"Uniform recovery", amount:800 },
+  { id:"DED-2", employeeId:"BMG-2274", period:"2026-08", kind:"uniform", label:"Uniform recovery", amount:1000 },
+  { id:"DED-3", employeeId:"BMG-1988", period:"2026-08", kind:"penalty", label:"Verified performance penalty", amount:500 },
+  { id:"DED-4", employeeId:"BMG-1469", period:"2026-08", kind:"advance", label:"Salary advance instalment", amount:2000 },
+  { id:"DED-5", employeeId:"BMG-2044", period:"2026-08", kind:"uniform", label:"Uniform recovery", amount:1200 },
 ];
 
 export const attendanceRows = [

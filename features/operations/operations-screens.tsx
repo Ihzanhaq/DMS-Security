@@ -13,7 +13,7 @@ import {
 } from "@/components/shared/screen-elements";
 import { useToast } from "@/components/shared/toast-context";
 
-export function SitesScreen({ onCreate, onConfigure }: { onCreate:()=>void; onConfigure:()=>void }) {
+export function SitesScreen({ onCreate, onConfigure }: { onCreate:()=>void; onConfigure:(site:string)=>void }) {
   const [district,setDistrict]=useState("All districts");
   const districts=useMemo(()=>["All districts",...Array.from(new Set(sites.map(site=>site.district)))],[]);
   const visible=sites.filter(site=>district==="All districts"||site.district===district);
@@ -30,7 +30,7 @@ export function SitesScreen({ onCreate, onConfigure }: { onCreate:()=>void; onCo
       <header><span className="small-icon blue"><Buildings size={19}/></span><div><h3>{site.name}</h3><p>{site.client} · {site.district}</p></div><Status tone={site.coverage===100?"success":"warning"}>{site.coverage}% staffed</Status></header>
       <dl><div><dt>Posts</dt><dd>{site.staffed} / {site.posts}</dd></div><div><dt>Benefit default</dt><dd>{site.scheme}</dd></div><div><dt>Geofence</dt><dd>{site.radius} metres</dd></div></dl>
       <ProgressBar value={site.coverage}/>
-      <footer><button className="text-button" onClick={onConfigure}>Open site</button><button className="secondary-button compact" onClick={onConfigure}><MapPin/>Edit boundary</button></footer>
+      <footer><button className="text-button" onClick={()=>onConfigure(site.name)}>Open site</button><button className="secondary-button compact" onClick={()=>onConfigure(site.name)}><MapPin/>Edit boundary</button></footer>
     </article>)}</div>
   </>;
 }
