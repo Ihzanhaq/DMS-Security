@@ -1,23 +1,26 @@
 import type {
-  ApprovedDuty, Employee, EmployeePayRule, PayrollDeduction, PostRateRule,
-  Site, SitePayRule, Skill, StatutorySettings,
+  ApprovedDuty, CustomFieldDef, DutyChangeRequest, Employee, EmployeeDocument,
+  EmployeePayRule, ExitRecord, ExportTemplate, FoTask, GuardChangeEvent,
+  PayrollDeduction, PostRateRule, Rating, RecruitmentVacancy, SatisfactionCall,
+  Site, SiteDocument, SiteFeedback, SitePayRule, Skill, SpareDutyPayment,
+  StatutorySettings, Ticket, UniformBatch, UniformRequest,
 } from "@/types/domain";
 
 export const employees: Employee[] = [
-  { id:"BMG-1840", name:"Suresh Babu", initials:"SB", role:"Security Officer", district:"Ernakulam", site:"Lulu Mall, Kochi", shift:"Day", status:"Active", salary:16000, payBasis:"monthly", pfOverride:"inherit", esiOverride:"inherit", skills:["General security","Day book"], pf:true, esi:true, phone:"98470 12840" },
-  { id:"BMG-2274", name:"Fathima N", initials:"FN", role:"Security Officer", district:"Ernakulam", site:"Aster Medcity", shift:"Day", status:"Active", salary:0, payBasis:"site", pfOverride:"disabled", esiOverride:"inherit", skills:["General security","Day book"], pf:false, esi:true, phone:"97462 41982" },
-  { id:"BMG-1988", name:"Rajeev Kumar", initials:"RK", role:"Senior Guard", district:"Thiruvananthapuram", site:"TCS Technopark", shift:"Night", status:"Active", salary:19000, payBasis:"monthly", pfOverride:"inherit", esiOverride:"inherit", skills:["Specialized","Day book","Driving"], pf:true, esi:true, phone:"94471 56301" },
-  { id:"BMG-1469", name:"Hareendrakumar K", initials:"HK", role:"Driver", district:"Kollam", site:"Travancore Medicity", shift:"Day", status:"Reliever", salary:0, dailyRate:750, skills:["Driving","General security"], pf:false, esi:false, phone:"95678 14329" },
-  { id:"BMG-2031", name:"Anzar M", initials:"AM", role:"Security Officer", district:"Alappuzha", site:"Lake Palace Resort", shift:"Night", status:"Leave", salary:15000, skills:["General security"], pf:false, esi:true, phone:"70252 46810" },
-  { id:"BMG-1778", name:"Shamnad C M", initials:"SC", role:"Security Officer", district:"Kottayam", site:"Caritas Hospital", shift:"Night", status:"Active", salary:15734, skills:["General security","Day book"], pf:true, esi:true, phone:"98952 67142" },
-  { id:"BMG-2118", name:"Vinod Raj", initials:"VR", role:"Reliever", district:"Ernakulam", site:"Unassigned", shift:"Day", status:"Reliever", salary:0, dailyRate:650, skills:["General security"], pf:false, esi:true, phone:"94953 71204" },
-  { id:"BMG-2260", name:"Bijoy Thomas", initials:"BT", role:"Reliever", district:"Kottayam", site:"Unassigned", shift:"Night", status:"Reliever", salary:0, dailyRate:516, skills:["General security"], pf:false, esi:true, phone:"90745 33810" },
-  { id:"BMG-2295", name:"Salim Basheer", initials:"SB", role:"Reliever", district:"Kollam", site:"Unassigned", shift:"Day", status:"Reliever", salary:0, dailyRate:500, skills:["General security"], pf:false, esi:false, phone:"85901 22764" },
-  { id:"BMG-1902", name:"Deepa Menon", initials:"DM", role:"Security Officer", district:"Thrissur", site:"Sobha City Mall", shift:"Day", status:"Active", salary:16400, skills:["General security","Day book"], pf:true, esi:true, phone:"99610 45528" },
-  { id:"BMG-2044", name:"Noushad P", initials:"NP", role:"Senior Guard", district:"Kozhikode", site:"Malabar Gold, Kozhikode", shift:"24-hour", status:"Active", salary:18500, skills:["Specialized","Day book"], pf:true, esi:true, phone:"97448 90113" },
-  { id:"BMG-2087", name:"Jomon Jose", initials:"JJ", role:"Security Officer", district:"Kannur", site:"Skyline Apartments", shift:"Night", status:"Active", salary:15200, skills:["General security"], pf:false, esi:true, phone:"96334 71589" },
-  { id:"BMG-1655", name:"Ashraf Ali", initials:"AA", role:"Driver", district:"Thiruvananthapuram", site:"TCS Technopark", shift:"Day", status:"Active", salary:17600, skills:["Driving","General security"], pf:true, esi:true, phone:"94004 61237" },
-  { id:"BMG-2301", name:"Prasanth V", initials:"PV", role:"Reliever", district:"Thrissur", site:"Unassigned", shift:"Day", status:"Reliever", salary:0, dailyRate:650, skills:["General security","Driving"], pf:false, esi:true, phone:"89432 05517" },
+  { id:"BMG-1840", name:"Suresh Babu", initials:"SB", role:"Security Officer", district:"Ernakulam", site:"Lulu Mall, Kochi", shift:"Day", status:"Active", salary:16000, payBasis:"monthly", pfOverride:"inherit", esiOverride:"inherit", skills:["General security","Day book"], pf:true, esi:true, phone:"98470 12840", joiningDate:"2024-03-14", pfEsiDataReceived:true },
+  { id:"BMG-2274", name:"Fathima N", initials:"FN", role:"Security Officer", district:"Ernakulam", site:"Aster Medcity", shift:"Day", status:"Active", salary:0, payBasis:"site", pfOverride:"disabled", esiOverride:"inherit", skills:["General security","Day book"], pf:false, esi:true, phone:"97462 41982", joiningDate:"2025-07-14", pfEsiDataReceived:true },
+  { id:"BMG-1988", name:"Rajeev Kumar", initials:"RK", role:"Senior Guard", district:"Thiruvananthapuram", site:"TCS Technopark", shift:"Night", status:"Active", salary:19000, payBasis:"monthly", pfOverride:"inherit", esiOverride:"inherit", skills:["Specialized","Day book","Driving"], pf:true, esi:true, phone:"94471 56301", joiningDate:"2024-09-02", pfEsiDataReceived:true },
+  { id:"BMG-1469", name:"Hareendrakumar K", initials:"HK", role:"Driver", district:"Kollam", site:"Travancore Medicity", shift:"Day", status:"Reliever", salary:0, dailyRate:750, skills:["Driving","General security"], pf:false, esi:false, phone:"95678 14329", joiningDate:"2024-01-08", pfEsiDataReceived:true },
+  { id:"BMG-2031", name:"Anzar M", initials:"AM", role:"Security Officer", district:"Alappuzha", site:"Lake Palace Resort", shift:"Night", status:"Leave", salary:15000, skills:["General security"], pf:false, esi:true, phone:"70252 46810", joiningDate:"2025-04-09", pfEsiDataReceived:true },
+  { id:"BMG-1778", name:"Shamnad C M", initials:"SC", role:"Security Officer", district:"Kottayam", site:"Caritas Hospital", shift:"Night", status:"Active", salary:15734, skills:["General security","Day book"], pf:true, esi:true, phone:"98952 67142", joiningDate:"2024-06-18", pfEsiDataReceived:true },
+  { id:"BMG-2118", name:"Vinod Raj", initials:"VR", role:"Reliever", district:"Ernakulam", site:"Unassigned", shift:"Day", status:"Reliever", salary:0, dailyRate:650, skills:["General security"], pf:false, esi:true, phone:"94953 71204", joiningDate:"2026-08-20", pfEsiDataReceived:false },
+  { id:"BMG-2260", name:"Bijoy Thomas", initials:"BT", role:"Reliever", district:"Kottayam", site:"Unassigned", shift:"Night", status:"Reliever", salary:0, dailyRate:516, skills:["General security"], pf:false, esi:true, phone:"90745 33810", joiningDate:"2026-04-06", pfEsiDataReceived:true },
+  { id:"BMG-2295", name:"Salim Basheer", initials:"SB", role:"Reliever", district:"Kollam", site:"Unassigned", shift:"Day", status:"Reliever", salary:0, dailyRate:500, skills:["General security"], pf:false, esi:false, phone:"85901 22764", joiningDate:"2026-09-16", pfEsiDataReceived:false },
+  { id:"BMG-1902", name:"Deepa Menon", initials:"DM", role:"Security Officer", district:"Thrissur", site:"Sobha City Mall", shift:"Day", status:"Active", salary:16400, skills:["General security","Day book"], pf:true, esi:true, phone:"99610 45528", joiningDate:"2024-11-03", pfEsiDataReceived:true },
+  { id:"BMG-2044", name:"Noushad P", initials:"NP", role:"Senior Guard", district:"Kozhikode", site:"Malabar Gold, Kozhikode", shift:"24-hour", status:"Active", salary:18500, skills:["Specialized","Day book"], pf:true, esi:true, phone:"97448 90113", joiningDate:"2025-02-17", pfEsiDataReceived:true },
+  { id:"BMG-2087", name:"Jomon Jose", initials:"JJ", role:"Security Officer", district:"Kannur", site:"Skyline Apartments", shift:"Night", status:"Active", salary:15200, skills:["General security"], pf:false, esi:true, phone:"96334 71589", joiningDate:"2025-08-12", pfEsiDataReceived:true },
+  { id:"BMG-1655", name:"Ashraf Ali", initials:"AA", role:"Driver", district:"Thiruvananthapuram", site:"TCS Technopark", shift:"Day", status:"Active", salary:17600, skills:["Driving","General security"], pf:true, esi:true, phone:"94004 61237", joiningDate:"2024-05-27", pfEsiDataReceived:true },
+  { id:"BMG-2301", name:"Prasanth V", initials:"PV", role:"Reliever", district:"Thrissur", site:"Unassigned", shift:"Day", status:"Reliever", salary:0, dailyRate:650, skills:["General security","Driving"], pf:false, esi:true, phone:"89432 05517", joiningDate:"2026-09-12", pfEsiDataReceived:false },
 ];
 
 /** Fixed reliever day rates. The tier applied depends on site and skill. */
@@ -29,14 +32,90 @@ export const relieverRates: { rate: number; label: string; applies: string }[] =
 ];
 
 export const sites: Site[] = [
-  { client:"Lulu Group",                name:"Lulu Mall, Kochi",         district:"Ernakulam",          posts:18, staffed:18, coverage:100, scheme:"PF + ESI",    lat:10.02700, lng:76.30800, radius:120 },
-  { client:"Tata Consultancy Services", name:"TCS Technopark",           district:"Thiruvananthapuram", posts:24, staffed:22, coverage:92,  scheme:"PF + ESI",    lat:8.55700,  lng:76.87900, radius:100 },
-  { client:"Aster DM Healthcare",       name:"Aster Medcity",            district:"Ernakulam",          posts:16, staffed:15, coverage:94,  scheme:"ESI",         lat:10.04500, lng:76.27600, radius:85  },
-  { client:"Lake Palace",               name:"Lake Palace Resort",       district:"Alappuzha",          posts:8,  staffed:7,  coverage:88,  scheme:"Salary only", lat:9.49800,  lng:76.33900, radius:75  },
-  { client:"Caritas Hospital",          name:"Caritas Hospital",         district:"Kottayam",           posts:12, staffed:10, coverage:83,  scheme:"PF + ESI",    lat:9.61800,  lng:76.53200, radius:100 },
-  { client:"Malabar Gold & Diamonds",   name:"Malabar Gold, Kozhikode",  district:"Kozhikode",          posts:10, staffed:10, coverage:100, scheme:"PF + ESI",    lat:11.24880, lng:75.78040, radius:60  },
-  { client:"Sobha Developers",          name:"Sobha City Mall",          district:"Thrissur",           posts:14, staffed:13, coverage:93,  scheme:"ESI",         lat:10.52760, lng:76.21440, radius:110 },
-  { client:"Skyline Builders",          name:"Skyline Apartments",       district:"Kannur",             posts:6,  staffed:5,  coverage:83,  scheme:"Salary only", lat:11.87450, lng:75.37040, radius:70  },
+  {
+    client:"Lulu Group", name:"Lulu Mall, Kochi", district:"Ernakulam", posts:18, staffed:18, coverage:100, scheme:"PF + ESI", lat:10.02700, lng:76.30800, radius:120,
+    polygon:[
+      { lat:10.02780, lng:76.30690 }, { lat:10.02785, lng:76.30910 },
+      { lat:10.02615, lng:76.30915 }, { lat:10.02610, lng:76.30695 },
+    ],
+    graceMins:30, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    escalationContacts:[
+      { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
+      { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
+      { label:"Control room (24×7)", name:"BMG HQ", phone:"0471 233 8899" },
+    ],
+    fieldOfficers:["Ajmal Khan","Praveen S"],
+  },
+  {
+    client:"Tata Consultancy Services", name:"TCS Technopark", district:"Thiruvananthapuram", posts:24, staffed:22, coverage:92, scheme:"PF + ESI", lat:8.55700, lng:76.87900, radius:100,
+    graceMins:60, dayCheckIntervalMins:60, nightCheckIntervalMins:45,
+    escalationContacts:[
+      { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
+      { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
+      { label:"Control room (24×7)", name:"BMG HQ", phone:"0471 233 8899" },
+    ],
+    fieldOfficers:["Praveen S"],
+  },
+  {
+    client:"Aster DM Healthcare", name:"Aster Medcity", district:"Ernakulam", posts:16, staffed:15, coverage:94, scheme:"ESI", lat:10.04500, lng:76.27600, radius:85,
+    graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    escalationContacts:[
+      { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
+      { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
+      { label:"Control room (24×7)", name:"BMG HQ", phone:"0471 233 8899" },
+    ],
+    fieldOfficers:["Ajmal Khan"],
+  },
+  {
+    client:"Lake Palace", name:"Lake Palace Resort", district:"Alappuzha", posts:8, staffed:7, coverage:88, scheme:"Salary only", lat:9.49800, lng:76.33900, radius:75,
+    graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    escalationContacts:[
+      { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
+      { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
+      { label:"Control room (24×7)", name:"BMG HQ", phone:"0471 233 8899" },
+    ],
+    fieldOfficers:["Ajmal Khan"],
+  },
+  {
+    client:"Caritas Hospital", name:"Caritas Hospital", district:"Kottayam", posts:12, staffed:10, coverage:83, scheme:"PF + ESI", lat:9.61800, lng:76.53200, radius:100,
+    graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    escalationContacts:[
+      { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
+      { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
+      { label:"Control room (24×7)", name:"BMG HQ", phone:"0471 233 8899" },
+    ],
+    fieldOfficers:["Ajmal Khan"],
+  },
+  {
+    client:"Malabar Gold & Diamonds", name:"Malabar Gold, Kozhikode", district:"Kozhikode", posts:10, staffed:10, coverage:100, scheme:"PF + ESI", lat:11.24880, lng:75.78040, radius:60,
+    graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    escalationContacts:[
+      { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
+      { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
+      { label:"Control room (24×7)", name:"BMG HQ", phone:"0471 233 8899" },
+    ],
+    fieldOfficers:["Ajmal Khan"],
+  },
+  {
+    client:"Sobha Developers", name:"Sobha City Mall", district:"Thrissur", posts:14, staffed:13, coverage:93, scheme:"ESI", lat:10.52760, lng:76.21440, radius:110,
+    graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    escalationContacts:[
+      { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
+      { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
+      { label:"Control room (24×7)", name:"BMG HQ", phone:"0471 233 8899" },
+    ],
+    fieldOfficers:["Ajmal Khan"],
+  },
+  {
+    client:"Skyline Builders", name:"Skyline Apartments", district:"Kannur", posts:6, staffed:5, coverage:83, scheme:"Salary only", lat:11.87450, lng:75.37040, radius:70,
+    graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    escalationContacts:[
+      { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
+      { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
+      { label:"Control room (24×7)", name:"BMG HQ", phone:"0471 233 8899" },
+    ],
+    fieldOfficers:["Ajmal Khan"],
+  },
 ];
 
 export const statutorySettings: StatutorySettings = {
@@ -391,3 +470,106 @@ export function rotationSplit(year: number, month: number, leadIsFirst = true) {
     pattern: Array.from({ length: days }, (_, index) => (index % 2 === 0) === leadIsFirst ? "a" : "b" as "a" | "b"),
   };
 }
+
+export const documentChecklist: string[] = ["ID proof", "PCC", "Bank passbook", "Photo", "Biodata"];
+
+export const customFieldDefs: CustomFieldDef[] = [
+  { key: "blood-group", label: "Blood group", kind: "text" },
+  { key: "id-mark", label: "Identification mark", kind: "text" },
+];
+
+export const employeeDocuments: EmployeeDocument[] = [
+  { id:"DOC-1", employeeId:"BMG-2295", type:"PCC",        status:"pending",  dueBy:"2026-09-18" },
+  { id:"DOC-2", employeeId:"BMG-2295", type:"ID proof",   status:"uploaded", dueBy:"2026-09-15", uploadedOn:"2026-09-12" },
+  { id:"DOC-3", employeeId:"BMG-2301", type:"PCC",        status:"pending",  dueBy:"2026-09-25" },
+  { id:"DOC-4", employeeId:"BMG-1840", type:"ID proof",   status:"verified", dueBy:"2024-03-20", uploadedOn:"2024-03-16" },
+];
+
+export const siteDocuments: SiteDocument[] = [
+  { id:"SDOC-1", site:"Lulu Mall, Kochi", kind:"agreement",           title:"Client agreement 2026–27",     version:"1.0", updatedOn:"2026-01-05", updatedBy:"Meera Nair" },
+  { id:"SDOC-2", site:"Lulu Mall, Kochi", kind:"pcc-requirement",     title:"PCC mandatory for all posts",  version:"1.2", updatedOn:"2026-08-20", updatedBy:"Meera Nair" },
+  { id:"SDOC-3", site:"TCS Technopark",   kind:"check-data",          title:"Vehicle check register spec",  version:"2.0", updatedOn:"2026-09-01", updatedBy:"Nithin Joseph" },
+];
+
+export const siteFeedback: SiteFeedback[] = [
+  { id:"FB-1", site:"Lulu Mall, Kochi", date:"2026-08-30", satisfaction:9, note:"Loading bay discipline appreciated by mall admin." },
+  { id:"FB-2", site:"Caritas Hospital", date:"2026-09-05", satisfaction:6, note:"Attender-pass process needs tightening at casualty." },
+];
+
+export const dutyChangeRequests: DutyChangeRequest[] = [
+  { id:"DCR-1", employeeId:"BMG-2031", type:"replacement", date:"2026-09-11", site:"Lake Palace Resort", reason:"sick",   note:"Fever since last night; reliever needed for night shift.", status:"pending" },
+  { id:"DCR-2", employeeId:"BMG-1840", type:"swap",        date:"2026-09-13", site:"Lulu Mall, Kochi",   reason:"personal", partnerId:"BMG-1902", note:"Family function; Deepa agreed to swap.", status:"pending" },
+  { id:"DCR-3", employeeId:"BMG-1988", type:"ot",          date:"2026-09-09", site:"TCS Technopark",     reason:"other",  hours:4, note:"Covered Block C after evening guard left early.", status:"approved" },
+];
+
+export const foTasks: FoTask[] = [
+  { id:"FOT-1", officer:"Ajmal Khan", site:"Lulu Mall, Kochi", kind:"sop-briefing",        detail:"Brief incoming loading-bay guard on SOP v3.2 at duty change.", due:"Today 17:45", status:"open" },
+  { id:"FOT-2", officer:"Praveen S",  site:"TCS Technopark",   kind:"client-complaint",    detail:"CMP-26091 — verify Block C patrol logs with facility desk.",   due:"Today 16:00", status:"open" },
+  { id:"FOT-3", officer:"Ajmal Khan", site:"Skyline Apartments", kind:"night-patrol",      detail:"Night patrolling round — gate discipline check.",              due:"Tonight 23:30", status:"open" },
+];
+
+export const guardChanges: GuardChangeEvent[] = [
+  { id:"GC-1", site:"Aster Medcity", post:"Emergency", outgoing:"Fathima N", incoming:"Vinod Raj", at:"2026-09-10 08:00" },
+];
+
+export const spareDutyPayments: SpareDutyPayment[] = [
+  { id:"SP-1", employeeId:"BMG-2118", date:"2026-09-09", site:"Aster Medcity",     amount:650, status:"transferred" },
+  { id:"SP-2", employeeId:"BMG-2260", date:"2026-09-10", site:"Caritas Hospital",  amount:516, status:"queued" },
+];
+
+export const uniformBatches: UniformBatch[] = [
+  { batchNo:"UB-2607", item:"Shirt (full sleeve)", size:"M",  qty:64, receivedOn:"2026-07-18" },
+  { batchNo:"UB-2607", item:"Shirt (full sleeve)", size:"L",  qty:72, receivedOn:"2026-07-18" },
+  { batchNo:"UB-2607", item:"Shirt (full sleeve)", size:"XL", qty:48, receivedOn:"2026-07-18" },
+  { batchNo:"UB-2611", item:"Trousers",            size:"32", qty:80, receivedOn:"2026-08-02" },
+  { batchNo:"UB-2611", item:"Trousers",            size:"34", qty:76, receivedOn:"2026-08-02" },
+  { batchNo:"UB-2598", item:"Shoes (black)",       size:"8",  qty:40, receivedOn:"2026-06-25" },
+  { batchNo:"UB-2598", item:"Shoes (black)",       size:"9",  qty:58, receivedOn:"2026-06-25" },
+];
+
+export const uniformRequests: UniformRequest[] = [
+  { id:"UR-1", employeeId:"BMG-1840", items:[{ item:"Shirt (full sleeve)", size:"L", qty:1 }], status:"dispatched", requestedOn:"2026-09-06", amount:450, recoveryPlan:"Full salary deduction" },
+  { id:"UR-2", employeeId:"BMG-2087", items:[{ item:"Shoes (black)", size:"9", qty:1 }], status:"requested", requestedOn:"2026-09-10", amount:900, recoveryPlan:"Partial advance" },
+];
+
+export const satisfactionCalls: SatisfactionCall[] = [
+  { id:"SAT-1", employeeId:"BMG-2295", joinedOn:"2026-09-16", dueBy:"2026-09-19", status:"due" },
+  { id:"SAT-2", employeeId:"BMG-2301", joinedOn:"2026-09-12", dueBy:"2026-09-15", status:"done", score:8, notes:"Happy with site; requested raincoat." },
+];
+
+export const ratings: Rating[] = [
+  { targetType:"employee", targetId:"BMG-1840", score:9, ratedBy:"Ajmal Khan",  on:"2026-09-01" },
+  { targetType:"employee", targetId:"BMG-2031", score:5, ratedBy:"Nithin Joseph", on:"2026-09-01" },
+  { targetType:"site",     targetId:"Lulu Mall, Kochi", score:9, ratedBy:"Meera Nair", on:"2026-09-01" },
+  { targetType:"site",     targetId:"Skyline Apartments", score:6, ratedBy:"Nithin Joseph", on:"2026-09-01" },
+];
+
+export const exitRecords: ExitRecord[] = [
+  { id:"EXIT-1", employeeId:"BMG-2031", date:"2026-09-14", time:"18:00", reason:"Personal — relocating", adjustments:"Final salary + leave encashment", priority:"high", assetsCleared:false, financeCleared:false },
+];
+
+export const recruitmentVacancies: RecruitmentVacancy[] = [
+  { id:"VAC-1", site:"Lake Palace Resort", post:"Lobby · Night", district:"Alappuzha", priority:"high", openedOn:"2026-09-14", source:"exit", status:"open" },
+  { id:"VAC-2", site:"Aster Medcity",      post:"Emergency · Day", district:"Ernakulam", priority:"normal", openedOn:"2026-09-01", source:"expansion", status:"interviewing" },
+];
+
+export const tickets: Ticket[] = [
+  { id:"TKT-1042", raisedBy:"BMG-1469", raisedByRole:"Guard", category:"salary", subject:"August duty count looks short", detail:"App shows 12.5 duties but I worked 13 days at Travancore Medicity.", status:"open", createdOn:"2026-09-09", sla:"2026-09-12", assignee:"Meera Nair",
+    trail:[{ title:"Raised from mobile app", time:"09 Sep · 18:12", state:"done" }, { title:"Assigned to HR", time:"09 Sep · 18:30", state:"active" }] },
+  { id:"TKT-1043", raisedBy:"BMG-2087", raisedByRole:"Guard", category:"uniform", subject:"Shoe size 9 out of stock", detail:"Requested on 10 Sep, no dispatch update.", status:"in-progress", createdOn:"2026-09-10", sla:"2026-09-14", assignee:"Store desk",
+    trail:[{ title:"Raised from mobile app", time:"10 Sep · 09:02", state:"done" }, { title:"Stock check in progress", time:"10 Sep · 11:40", state:"active" }] },
+];
+
+export const exportTemplates: ExportTemplate[] = [
+  { name:"Default CSV", report:"Net payout register", columns:[] },
+];
+
+/** Monthly performance series for analytics (site coverage % and complaint counts). */
+export const monthlyPerformance = [
+  { month:"Apr", coverage:94, complaints:9,  attendance:92 },
+  { month:"May", coverage:95, complaints:7,  attendance:93 },
+  { month:"Jun", coverage:93, complaints:11, attendance:91 },
+  { month:"Jul", coverage:96, complaints:6,  attendance:95 },
+  { month:"Aug", coverage:97, complaints:5,  attendance:96 },
+  { month:"Sep", coverage:96, complaints:4,  attendance:94 },
+];

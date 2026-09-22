@@ -48,7 +48,7 @@ function SalarySiteDetails({ breakdown, expanded }: { breakdown: PayrollBreakdow
   return (
     <div className="salary-sites">
       {breakdown.sites.map(site => (
-        <details key={site.site} defaultOpen={expanded ?? breakdown.sites.length <= 3}>
+        <details key={site.site} open={expanded ?? breakdown.sites.length <= 3}>
           <summary>
             <div className="salary-site-summary">
               <div>
