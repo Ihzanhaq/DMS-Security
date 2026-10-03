@@ -6,10 +6,11 @@ import {
   FileCsv, FileText, GearSix, Plus, UsersThree, WarningCircle,
 } from "@phosphor-icons/react";
 import {
-  attendanceRows, complaintTrail, complaints, customFieldDefs as customFieldSeed, deductionLog, documentChecklist as documentChecklistSeed, employees,
+  attendanceRows, complaintTrail, complaints, deductionLog, employees,
   exportTemplates, lateAndAbsent, payrollRows, rupees, sites, sopDocuments, uniformPlans,
 } from "@/lib/mock-data";
 import { applyTemplate, toCsv } from "@/lib/export-mapper";
+import { useOnboarding } from "@/components/shared/onboarding-context";
 import type { CustomFieldDef, ExportColumn, ExportTemplate } from "@/types/domain";
 import {
   DefRows, DetailDrawer, PageHeader, Panel, StatStrip, Status, Timeline, Toolbar,
@@ -366,9 +367,12 @@ export function SettingsScreen({ onOpenAccess }: { onOpenAccess: () => void }) {
   const [dutyUnits,setDutyUnits]=useState(["0.25","0.50","0.75","1.00","1.50"]);
   const groups=["Organization","Onboarding","Attendance","Payroll","PF and ESI","Duty units","Notifications","Roles and access"];
   const [group,setGroup]=useState("Attendance");
-  const [docTypes,setDocTypes]=useState<string[]>(documentChecklistSeed);
+  const onboarding=useOnboarding();
+  const docTypes=onboarding.config.documentChecklist;
+  const setDocTypes=(update:(current:string[])=>string[])=>onboarding.saveConfig({ ...onboarding.config, documentChecklist:update(docTypes) });
   const [newDocType,setNewDocType]=useState("");
-  const [fieldDefs,setFieldDefs]=useState<CustomFieldDef[]>(customFieldSeed);
+  const fieldDefs=onboarding.config.customFieldDefs;
+  const setFieldDefs=(update:(current:CustomFieldDef[])=>CustomFieldDef[])=>onboarding.saveConfig({ ...onboarding.config, customFieldDefs:update(fieldDefs) });
   return <>
     <PageHeader title="Settings" description="Effective-dated defaults with client, site, post and employee overrides." actions={<button className="primary-button" onClick={()=>{setSaved(true);notify(`${group} settings saved`);setTimeout(()=>setSaved(false),1800)}}><CheckCircle/>{saved?"Saved":"Save changes"}</button>}/>
     <div className="settings-layout">
@@ -417,7 +421,7 @@ export function SettingsScreen({ onOpenAccess }: { onOpenAccess: () => void }) {
             </div>)}</div>
             <button className="secondary-button compact" onClick={()=>setFieldDefs(current=>[...current,{ key:`field-${Date.now()}`, label:"New field", kind:"text" }])}><Plus/>Add field</button>
           </div>
-          <label><span>PF/ESI alert window</span><div className="input-suffix"><input type="number" defaultValue="15"/><b>days after joining</b></div><small>HR is alerted when enrolment data has not arrived inside this window.</small></label>
+          <label><span>PF/ESI alert window</span><div className="input-suffix"><input type="number" min={1} value={onboarding.config.pfEsiWindowDays} onChange={event=>onboarding.saveConfig({ ...onboarding.config, pfEsiWindowDays:Math.max(1,Number(event.target.value)||1) })}/><b>days after joining</b></div><small>HR is alerted when enrolment data has not arrived inside this window.</small></label>
         </div>}
         {group==="Roles and access"&&<div className="settings-access-pointer">
           <p>Roles, their reporting line and per-module permissions — plus individual users and their overrides — are managed on the Users &amp; roles screen.</p>

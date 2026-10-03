@@ -11,6 +11,7 @@ import { complaintTrail, complaints, distanceMetres, dutyChangeRequests, employe
 import { isInsideGeofence } from "@/lib/geofence";
 import { computeAdvanceEligibility } from "@/lib/advance-calculator";
 import { usePayroll } from "@/components/shared/payroll-context";
+import { useOnboarding } from "@/components/shared/onboarding-context";
 import { GeoMap } from "@/components/shared/geo-map";
 import {
   DefRows, DetailDrawer, PageHeader, Panel, ProgressBar, Status, Timeline,
@@ -89,8 +90,7 @@ const itemPrice=(item:string)=>item.startsWith("Shoes")?900:item==="Trousers"?55
 
 function GuardUniform(){
   const notify=useToast();
-  const me=employees.find(item=>item.id==="BMG-1840");
-  const sizes=me?.uniformSizes??{ shirt:"L", trouser:"34", shoe:"9" };
+  const sizes=useOnboarding().getProfile("BMG-1840").uniformSizes;
   const [item,setItem]=useState(uniformKit[0].item);
   const [size,setSize]=useState(sizeOptions(uniformKit[0].item)[2]??sizeOptions(uniformKit[0].item)[0]);
   const [qty,setQty]=useState(1);

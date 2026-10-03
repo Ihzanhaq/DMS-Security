@@ -176,7 +176,10 @@ The selected role and screen are stored in the URL, so refresh and browser Back/
 - Work-location preference: district and taluk dropdowns for all 14 Kerala districts.
 - Uniform sizes (shirt/trouser/shoe) captured on the form; joining date drives the PF/ESI 15-day warning.
 - Custom profile fields defined by admins render automatically.
-- Test: **Workforce → Add employee** — mark a document uploaded, change the preferred district and watch the taluk list follow.
+- **Save employee** stores everything — documents, nominee, sizes, preference, custom fields, PF/ESI received flag — in this browser (localStorage `bmg-onboarding-v1`); reopening the employee shows it after a reload.
+- **Settings → Onboarding** drives the form: added document types appear on every employee, custom fields appear on the form, and the PF/ESI alert window (days) changes the warning and the bell alert.
+- The guard app's Uniform screen shows the sizes saved on the employee.
+- Test: **Settings → Onboarding** — add "Driving licence", set the window to 7. **Workforce → Suresh Babu → Edit profile** — mark Driving licence uploaded, set shirt XL, enter a nominee, save. Reload and reopen: all kept. The bell now also flags Prasanth V (joined 12 Sep). Sign in as Suresh → Uniform shows XL.
 
 **Notifications**
 

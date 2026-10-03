@@ -9,7 +9,8 @@ import {
 import { DefRows, DetailDrawer, PageHeader, Panel, PersonCell, StatStrip, Status, Timeline } from "@/components/shared/screen-elements";
 import { GeoMap } from "@/components/shared/geo-map";
 import { useToast } from "@/components/shared/toast-context";
-import { customFieldDefs, documentChecklist, employeeDocuments, employees as employeeRecords, rupees, siteDocuments, siteFeedback, sites as siteRecords, skillOptions, statutorySettings } from "@/lib/mock-data";
+import { useOnboarding, withChecklist } from "@/components/shared/onboarding-context";
+import { employees as employeeRecords, rupees, siteDocuments, siteFeedback, sites as siteRecords, skillOptions, statutorySettings } from "@/lib/mock-data";
 import { useOps } from "@/components/shared/ops-context";
 import { usePayroll } from "@/components/shared/payroll-context";
 import { keralaDistricts, keralaTaluks } from "@/lib/kerala-geo";
@@ -44,26 +45,34 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
   const [skills, setSkills] = useState<string[]>(["Day book", "General security"]);
   const availableSkills: string[] = [...skillOptions];
   const toggleSkill = (skill: string) => setSkills(current => current.includes(skill) ? current.filter(item => item !== skill) : [...current, skill]);
-  const [joiningDate, setJoiningDate] = useState(employeeId ? employee.joiningDate : "2026-09-22");
-  const [prefDistrict, setPrefDistrict] = useState(employee.workPreference?.district ?? employee.district);
-  const [prefTaluk, setPrefTaluk] = useState(employee.workPreference?.taluk ?? (keralaTaluks[employee.workPreference?.district ?? employee.district] ?? [])[0] ?? "");
-  const [docs, setDocs] = useState<EmployeeDocument[]>(() => {
-    const existing = employeeDocuments.filter(doc => doc.employeeId === targetEmployeeId);
-    const covered = new Set(existing.map(doc => doc.type));
-    return [
-      ...existing,
-      ...documentChecklist.filter(type => !covered.has(type)).map((type, index) => ({ id:`DOC-NEW-${index}`, employeeId:targetEmployeeId, type, status:"pending" as EmployeeDocumentStatus, dueBy:"2026-09-29" })),
-    ];
-  });
+  const onboarding = useOnboarding();
+  const { config } = onboarding;
+  const [savedProfile] = useState(() => onboarding.getProfile(targetEmployeeId));
+  const [joiningDate, setJoiningDate] = useState(savedProfile.joiningDate);
+  const [pfEsiReceived, setPfEsiReceived] = useState(savedProfile.pfEsiDataReceived);
+  const [prefDistrict, setPrefDistrict] = useState(savedProfile.workPreference.district || employee.district);
+  const [prefTaluk, setPrefTaluk] = useState(savedProfile.workPreference.taluk || ((keralaTaluks[savedProfile.workPreference.district || employee.district] ?? [])[0] ?? ""));
+  const [sizes, setSizes] = useState(savedProfile.uniformSizes);
+  const [customValues, setCustomValues] = useState(savedProfile.customFields);
+  const [docs, setDocs] = useState<EmployeeDocument[]>(() => withChecklist(targetEmployeeId, savedProfile.documents, config.documentChecklist));
   const [newDocType, setNewDocType] = useState("");
-  const [nominee, setNominee] = useState({ name: employee.nominee?.name ?? "", relation: employee.nominee?.relation ?? "Spouse", phone: employee.nominee?.phone ?? "", address: employee.nominee?.address ?? "", bankAccount: employee.nominee?.bankAccount ?? "", ifsc: employee.nominee?.ifsc ?? "", photoOnFile: employee.nominee?.photoOnFile ?? false });
-  const pfEsiOverdue = !employee.pfEsiDataReceived && (Date.parse("2026-09-22") - Date.parse(joiningDate)) / 86400000 >= 15;
+  const [nominee, setNominee] = useState(savedProfile.nominee);
+  const pfEsiOverdue = !pfEsiReceived && (Date.parse("2026-09-22") - Date.parse(joiningDate)) / 86400000 >= config.pfEsiWindowDays;
+  const saveEmployee = () => {
+    updateEmployeeRule({ employeeId:targetEmployeeId, effectiveFrom, basis:payBasis, monthlySalary:payBasis==="monthly"?amount:undefined, dailyRate:payBasis==="daily"?amount:undefined, payableDays, pfOverride, esiOverride });
+    onboarding.saveProfile(targetEmployeeId, {
+      joiningDate, pfEsiDataReceived: pfEsiReceived,
+      workPreference: { district: prefDistrict, taluk: prefTaluk },
+      uniformSizes: sizes, nominee, customFields: customValues, documents: docs,
+    });
+    setSaved(true);
+  };
   const editDocRow = (index: number, patch: Partial<EmployeeDocument>) => setDocs(current => current.map((doc, row) => row === index ? { ...doc, ...patch } : doc));
 
   return <>
     <PageHeader title="Employee profile" description="Identity, capability, employment, statutory and recovery settings."
-      actions={<><BackButton onBack={onBack}/><button className="secondary-button" onClick={onImport}>Import employees</button><button className="primary-button" onClick={() => { updateEmployeeRule({ employeeId:targetEmployeeId, effectiveFrom, basis:payBasis, monthlySalary:payBasis==="monthly"?amount:undefined, dailyRate:payBasis==="daily"?amount:undefined, payableDays, pfOverride, esiOverride }); setSaved(true); }}><FloppyDisk />Save employee</button></>} />
-    {saved && <SavedNotice>Employee profile saved with an effective date.</SavedNotice>}
+      actions={<><BackButton onBack={onBack}/><button className="secondary-button" onClick={onImport}>Import employees</button><button className="primary-button" onClick={saveEmployee}><FloppyDisk />Save employee</button></>} />
+    {saved && <SavedNotice>Employee profile, documents, nominee and onboarding details saved.</SavedNotice>}
     <div className="workflow-grid">
       <Panel title="Identity and employment" description="Core details used across deployment and payroll.">
         <div className="form-grid">
@@ -71,15 +80,16 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
           <label><span>Full name</span><input defaultValue={employeeId ? employee.name : ""} placeholder="Employee name" /></label>
           <label><span>Mobile number</span><input defaultValue={employeeId ? employee.phone : ""} /></label>
           <label><span>District</span><select defaultValue={employee.district}>{districts.map(item => <option key={item}>{item}</option>)}</select></label>
-          <label><span>Joining date</span><input type="date" value={joiningDate} onChange={event => setJoiningDate(event.target.value)} /><small>PF/ESI data must reach HR within 15 days of joining.</small></label>
+          <label><span>Joining date</span><input type="date" value={joiningDate} onChange={event => setJoiningDate(event.target.value)} /><small>PF/ESI data must reach HR within {config.pfEsiWindowDays} days of joining.</small></label>
+          <label><span>PF/ESI enrolment data</span><select value={pfEsiReceived ? "yes" : "no"} onChange={event => setPfEsiReceived(event.target.value === "yes")}><option value="no">Not received</option><option value="yes">Received</option></select></label>
           <label><span>Employment status</span><select><option>Active</option><option>Reliever</option><option>On leave</option><option>Exit initiated</option></select></label>
           <label><span>Preferred district</span><select value={prefDistrict} onChange={event => { setPrefDistrict(event.target.value); setPrefTaluk((keralaTaluks[event.target.value] ?? [])[0] ?? ""); }}>{keralaDistricts.map(item => <option key={item}>{item}</option>)}</select></label>
           <label><span>Preferred taluk</span><select value={prefTaluk} onChange={event => setPrefTaluk(event.target.value)}>{(keralaTaluks[prefDistrict] ?? []).map(item => <option key={item}>{item}</option>)}</select></label>
-          <label><span>Shirt size</span><select defaultValue={employee.uniformSizes?.shirt ?? "L"}>{["S","M","L","XL","XXL"].map(size => <option key={size}>{size}</option>)}</select></label>
-          <label><span>Trouser size</span><select defaultValue={employee.uniformSizes?.trouser ?? "34"}>{["30","32","34","36","38"].map(size => <option key={size}>{size}</option>)}</select></label>
-          <label><span>Shoe size</span><select defaultValue={employee.uniformSizes?.shoe ?? "9"}>{["6","7","8","9","10","11"].map(size => <option key={size}>{size}</option>)}</select></label>
+          <label><span>Shirt size</span><select value={sizes.shirt} onChange={event => setSizes({ ...sizes, shirt: event.target.value })}>{["S","M","L","XL","XXL"].map(size => <option key={size}>{size}</option>)}</select></label>
+          <label><span>Trouser size</span><select value={sizes.trouser} onChange={event => setSizes({ ...sizes, trouser: event.target.value })}>{["30","32","34","36","38"].map(size => <option key={size}>{size}</option>)}</select></label>
+          <label><span>Shoe size</span><select value={sizes.shoe} onChange={event => setSizes({ ...sizes, shoe: event.target.value })}>{["6","7","8","9","10","11"].map(size => <option key={size}>{size}</option>)}</select></label>
         </div>
-        {pfEsiOverdue && <div className="inline-alert warning"><WarningCircle/><span>PF/ESI enrolment data has not been received and 15 days have passed since joining ({joiningDate}). HR has been alerted.</span></div>}
+        {pfEsiOverdue && <div className="inline-alert warning"><WarningCircle/><span>{`PF/ESI enrolment data has not been received and ${config.pfEsiWindowDays} days have passed since joining (${joiningDate}). HR has been alerted.`}</span></div>}
       </Panel>
       <Panel title="Skills and eligibility" description="Operations can filter employees by these verified capabilities.">
         <div className="choice-grid">{availableSkills.map(skill => <button key={skill} className={skills.includes(skill) ? "choice-card selected" : "choice-card"} onClick={() => toggleSkill(skill)}><span>{skills.includes(skill) ? <CheckCircle weight="fill" /> : <Check />}</span><strong>{skill}</strong><small>{skill === "Driving" ? "Licence can be recorded in documents" : "Eligible for matching posts"}</small></button>)}</div>
@@ -114,7 +124,8 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
       </Panel>
       <Panel title="Additional fields" description="Defined by administrators in Settings → Custom fields.">
         <div className="form-grid">
-          {customFieldDefs.map(def => <label key={def.key}><span>{def.label}</span><input type={def.kind === "number" ? "number" : def.kind === "date" ? "date" : "text"} defaultValue={employee.customFields?.[def.key] ?? ""}/></label>)}
+          {config.customFieldDefs.map(def => <label key={def.key}><span>{def.label}</span><input type={def.kind === "number" ? "number" : def.kind === "date" ? "date" : "text"} value={customValues[def.key] ?? ""} onChange={event => setCustomValues(current => ({ ...current, [def.key]: event.target.value }))}/></label>)}
+          {config.customFieldDefs.length === 0 && <p className="vertex-empty">No custom fields defined. Add them in Settings → Onboarding.</p>}
         </div>
       </Panel>
       <Panel title="Pay and statutory profile" description="Employee settings override organization, client and site defaults.">

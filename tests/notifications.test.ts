@@ -37,6 +37,14 @@ describe("deriveNotifications", () => {
     expect(received.some(item => item.kind === "pf-esi-15day")).toBe(false);
   });
 
+  it("honours a configured PF/ESI window", () => {
+    const base = { today, documents: [], guardChanges: [], spareDutyPayments: [], satisfactionCalls: [], sopEdits: [],
+      employees: [{ id: "E1", name: "A", joiningDate: "2026-09-12", pfEsiDataReceived: false }] };
+    expect(deriveNotifications(base).some(item => item.kind === "pf-esi-15day")).toBe(false);
+    const sevenDay = deriveNotifications({ ...base, pfEsiWindowDays: 7 }).find(item => item.kind === "pf-esi-15day");
+    expect(sevenDay?.title).toContain("7 days");
+  });
+
   it("notifies FOs about guard changes and Ops+Finance about spare-duty payments", () => {
     const result = deriveNotifications({
       today, employees: [], documents: [], satisfactionCalls: [], sopEdits: [],

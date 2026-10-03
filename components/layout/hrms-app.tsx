@@ -22,10 +22,11 @@ import {
 } from "@/features/workflows/workflow-screens";
 import { AccessScreen } from "@/features/access/access-screen";
 import { AccessProvider, useAccess } from "@/components/shared/access-context";
+import { OnboardingProvider, useOnboarding } from "@/components/shared/onboarding-context";
 import { OpsProvider } from "@/components/shared/ops-context";
 import { ToastProvider, useToast } from "@/components/shared/toast-context";
 import { HrQualityScreen, RecruitmentScreen } from "@/features/hr/hr-quality-screens";
-import { employeeDocuments, employees, guardChanges, satisfactionCalls, spareDutyPayments } from "@/lib/mock-data";
+import { guardChanges, satisfactionCalls, spareDutyPayments } from "@/lib/mock-data";
 import { deriveNotifications } from "@/lib/notifications";
 import { effectivePermissions, landingView, type AccessRole } from "@/lib/access";
 import type { AppNotification, AppView } from "@/types/domain";
@@ -94,7 +95,7 @@ const clientNavigation: NavGroup[] = [{ label: "Client portal", items: [
 ]}];
 
 export function HrmsApp() {
-  return <ToastProvider><AccessProvider><OpsProvider><HrmsShell /></OpsProvider></AccessProvider></ToastProvider>;
+  return <ToastProvider><AccessProvider><OnboardingProvider><OpsProvider><HrmsShell /></OpsProvider></OnboardingProvider></AccessProvider></ToastProvider>;
 }
 
 function HrmsShell() {
@@ -117,19 +118,22 @@ function HrmsShell() {
   const [search, setSearch] = useState("");
   const contentRef = useRef<HTMLDivElement>(null);
   const notify = useToast();
+  const onboarding = useOnboarding();
   const notifications = useMemo(() => {
     if (portal !== "internal") return [];
     const derived = deriveNotifications({
       today: "2026-09-22",
-      employees, documents: employeeDocuments, guardChanges, spareDutyPayments,
-      satisfactionCalls, sopEdits: [],
+      employees: onboarding.allProfiles.map(item => ({ id: item.employeeId, name: item.name, joiningDate: item.profile.joiningDate, pfEsiDataReceived: item.profile.pfEsiDataReceived })),
+      documents: onboarding.allProfiles.flatMap(item => item.profile.documents),
+      guardChanges, spareDutyPayments, satisfactionCalls, sopEdits: [],
+      pfEsiWindowDays: onboarding.config.pfEsiWindowDays,
     });
     const generics: AppNotification[] = [
       { id:"gen-sla", kind:"complaint-sla", title:"Complaint SLA due soon", detail:"CMP-26091 · TCS Technopark · due 16:00", audience:[], targetView:"complaints", at:"2026-09-22" },
       { id:"gen-payroll", kind:"generic", title:"Payroll exceptions ready", detail:"August 2026 · 3 configuration exceptions", audience:[], targetView:"payroll", at:"2026-09-22" },
     ];
     return [...derived, ...generics].filter(item => canOpen(item.targetView));
-  }, [portal, canOpen]);
+  }, [portal, canOpen, onboarding]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -269,7 +273,7 @@ function HrmsShell() {
 
         <div className={readOnly ? "page read-only" : "page"} ref={contentRef} onClickCapture={blockReadOnlyActions}>
           {readOnly && <div className="readonly-banner" data-enter><LockSimple /><span><strong>View only.</strong> You can read this screen; changes need edit access to this module.</span></div>}
-          {renderView(view, currentRole, navigate, openAction, editingEmployeeId, openEmployeeForm, allocationEmployeeId, openAllocationAudit, selectedSite, openSiteConfig, siteInitialTab, canOpen, activeGuard, guard => {
+          {renderView(view, currentRole, navigate, openAction, editingEmployeeId, openEmployeeForm, allocationEmployeeId, openAllocationAudit, selectedSite, openSiteConfig, siteInitialTab, canOpen, onboarding.ready, activeGuard, guard => {
             const registered = users.find(user => user.employeeId === guard.id && user.status === "active");
             if (registered) { signInAs(registered.id); setGuestGuard(null); } else setGuestGuard(guard);
             notify(`Signed in as ${guard.name}`);
@@ -283,7 +287,7 @@ function HrmsShell() {
   );
 }
 
-function renderView(view: AppView, role: AccessRole, navigate: (view: string) => void, openAction: (name: string) => void, editingEmployeeId:string|null, openEmployeeForm:(employeeId:string|null)=>void, allocationEmployeeId:string|null, openAllocationAudit:(employeeId?:string)=>void, selectedSite:string|null, openSiteConfig:(site:string|null,tab?:"profile"|"salary")=>void, siteInitialTab:"profile"|"salary", canOpen:(view:AppView)=>boolean, activeGuard?:GuardUser, onSwitchUser?:(user:GuardUser)=>void) {
+function renderView(view: AppView, role: AccessRole, navigate: (view: string) => void, openAction: (name: string) => void, editingEmployeeId:string|null, openEmployeeForm:(employeeId:string|null)=>void, allocationEmployeeId:string|null, openAllocationAudit:(employeeId?:string)=>void, selectedSite:string|null, openSiteConfig:(site:string|null,tab?:"profile"|"salary")=>void, siteInitialTab:"profile"|"salary", canOpen:(view:AppView)=>boolean, onboardingReady:boolean, activeGuard?:GuardUser, onSwitchUser?:(user:GuardUser)=>void) {
   if (view === "guard-vigilance") return <NightVigilanceScreen guardMode onBack={() => navigate("guard-home")} />;
   if (view.startsWith("guard-")) return <GuardPortal view={view} onNavigate={next => navigate(next)} activeGuard={activeGuard} onSwitchUser={onSwitchUser} />;
   if (view.startsWith("client-")) return <ClientPortal view={view} onNavigate={next => navigate(next)} />;
@@ -303,7 +307,7 @@ function renderView(view: AppView, role: AccessRole, navigate: (view: string) =>
     case "reports": return <ReportsScreen />;
     case "imports": return <ImportsScreen />;
     case "settings": return <SettingsScreen onOpenAccess={() => navigate("access")} />;
-    case "employee-form": return <EmployeeFormScreen employeeId={editingEmployeeId} onBack={() => navigate("workforce")} onImport={() => navigate("imports")} />;
+    case "employee-form": return <EmployeeFormScreen key={`${editingEmployeeId ?? "new"}-${onboardingReady}`} employeeId={editingEmployeeId} onBack={() => navigate("workforce")} onImport={() => navigate("imports")} />;
     case "site-config": return <SiteConfigurationScreen role={role.name} siteName={selectedSite} initialTab={siteInitialTab} onBack={() => navigate(canOpen("sites") ? "sites" : "payroll")} />;
     case "payroll-allocation": return <PayrollAllocationScreen employeeId={allocationEmployeeId} onBack={() => navigate("payroll")} />;
     case "night-vigilance": return <NightVigilanceScreen onBack={() => navigate("dashboard")} />;

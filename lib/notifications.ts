@@ -11,6 +11,8 @@ export type NotificationInput = {
   spareDutyPayments: SpareDutyPayment[];
   satisfactionCalls: SatisfactionCall[];
   sopEdits: SopEdit[];
+  /** Days after joining before missing PF/ESI data raises an alert. */
+  pfEsiWindowDays?: number;
 };
 
 const DAY_MS = 86_400_000;
@@ -34,10 +36,10 @@ export function deriveNotifications(input: NotificationInput): AppNotification[]
   }
 
   for (const employee of input.employees) {
-    if (!employee.pfEsiDataReceived && daysBetween(employee.joiningDate, input.today) >= 15) {
+    if (!employee.pfEsiDataReceived && daysBetween(employee.joiningDate, input.today) >= (input.pfEsiWindowDays ?? 15)) {
       list.push({
         id: `pfesi-${employee.id}`, kind: "pf-esi-15day",
-        title: "PF/ESI data missing beyond 15 days",
+        title: `PF/ESI data missing beyond ${input.pfEsiWindowDays ?? 15} days`,
         detail: `${employee.name} joined ${employee.joiningDate}; enrolment details not received`,
         audience: ["Owner", "Branch Manager", "HR", "HR Assistant"],
         targetView: "workforce", at: input.today,
