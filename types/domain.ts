@@ -1,3 +1,5 @@
+import type { StoredFileMeta } from "@/lib/file-store";
+
 export type Role =
   | "Owner" | "Branch Manager" | "Operations In-charge"
   | "Finance" | "Finance Assistant"
@@ -190,6 +192,8 @@ export type EmployeeDocument = {
   /** Upload deadline; a pending doc past this date raises a delay notification. */
   dueBy: string;
   uploadedOn?: string;
+  /** The uploaded file, when one is attached. */
+  file?: StoredFileMeta;
 };
 
 export type Nominee = {
@@ -199,8 +203,10 @@ export type Nominee = {
   address: string;
   bankAccount?: string;
   ifsc?: string;
-  /** Prototype flag — real upload arrives with the backend. */
+  /** Mirrors whether a nominee photo is attached. */
   photoOnFile: boolean;
+  /** Uploaded nominee photo. */
+  photo?: StoredFileMeta;
 };
 
 export type WorkPreference = { district: string; taluk: string };

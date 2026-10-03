@@ -43,3 +43,18 @@
 .doc-type em{font-style:normal;font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--danger);background:var(--danger-tint);padding:2px 6px;border-radius:var(--r-sm)}
 .doc-add-row{display:grid;grid-template-columns:1fr auto;gap:9px;padding:12px 18px;border-top:1px solid var(--line)}
 .nominee-photo{margin:0 20px 18px}
+
+/* File uploads */
+.file-slot{display:inline-flex;align-items:center;gap:5px;min-width:0}
+.file-chip{display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:200px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;background:var(--surface-2);font-size:11px}
+.file-chip>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-chip small{color:var(--muted);flex:0 0 auto}
+.file-chip svg{color:var(--accent);flex:0 0 auto}
+.icon-button.small{width:30px;height:30px;border-radius:7px}
+.icon-button.small svg{width:15px;height:15px}
+.editable-row.employee-doc-row{grid-template-columns:minmax(130px,.8fr) 112px 130px minmax(150px,1.4fr)}
+.nominee-photo-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 20px 18px;padding:12px;border:1px solid var(--line);border-radius:9px}
+.nominee-photo-row>span{display:grid}
+.nominee-photo-row strong{font-size:12px}
+.nominee-photo-row small{font-size:10px;color:var(--muted);margin-top:2px}
+@media(max-width:760px){.editable-row.employee-doc-row{grid-template-columns:1fr 1fr}}

@@ -179,6 +179,8 @@ The selected role and screen are stored in the URL, so refresh and browser Back/
 - **Save employee** stores everything — documents, nominee, sizes, preference, custom fields, PF/ESI received flag — in this browser (localStorage `bmg-onboarding-v1`); reopening the employee shows it after a reload.
 - **Settings → Onboarding** drives the form: added document types appear on every employee, custom fields appear on the form, and the PF/ESI alert window (days) changes the warning and the bell alert.
 - The guard app's Uniform screen shows the sizes saved on the employee.
+- **Real file uploads:** every document row and the nominee photo have Upload (PDF, JPG, PNG, WEBP; max 5 MB). Uploaded files can be viewed, downloaded, replaced or removed; uploading sets the document to Uploaded, removing sets it back to Pending. Files are stored in this browser (IndexedDB `bmg-files`) until the backend exists.
+- Test: Suresh Babu → Edit profile → upload a PDF on PCC → Save → reload → reopen → the file opens with View.
 - Test: **Settings → Onboarding** — add "Driving licence", set the window to 7. **Workforce → Suresh Babu → Edit profile** — mark Driving licence uploaded, set shirt XL, enter a nominee, save. Reload and reopen: all kept. The bell now also flags Prasanth V (joined 12 Sep). Sign in as Suresh → Uniform shows XL.
 
 **Notifications**

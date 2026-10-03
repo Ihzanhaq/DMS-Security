@@ -10,6 +10,7 @@ import { DefRows, DetailDrawer, PageHeader, Panel, PersonCell, StatStrip, Status
 import { GeoMap } from "@/components/shared/geo-map";
 import { useToast } from "@/components/shared/toast-context";
 import { useOnboarding, withChecklist } from "@/components/shared/onboarding-context";
+import { FileSlot } from "@/components/shared/file-upload";
 import { employees as employeeRecords, rupees, siteDocuments, siteFeedback, sites as siteRecords, skillOptions, statutorySettings } from "@/lib/mock-data";
 import { useOps } from "@/components/shared/ops-context";
 import { usePayroll } from "@/components/shared/payroll-context";
@@ -46,6 +47,7 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
   const availableSkills: string[] = [...skillOptions];
   const toggleSkill = (skill: string) => setSkills(current => current.includes(skill) ? current.filter(item => item !== skill) : [...current, skill]);
   const onboarding = useOnboarding();
+  const canEditProfile = useAccess().canEdit("employee-form");
   const { config } = onboarding;
   const [savedProfile] = useState(() => onboarding.getProfile(targetEmployeeId));
   const [joiningDate, setJoiningDate] = useState(savedProfile.joiningDate);
@@ -103,7 +105,10 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
               <option value="pending">Pending</option><option value="uploaded">Uploaded</option><option value="verified">Verified</option>
             </select>
             <input type="date" value={doc.dueBy} onChange={event => editDocRow(index, { dueBy: event.target.value })} aria-label={`${doc.type} due date`}/>
-            <button className="secondary-button compact" disabled={doc.status !== "pending"} onClick={() => editDocRow(index, { status: "uploaded", uploadedOn: "2026-09-22" })}>{doc.status === "pending" ? "Mark uploaded" : doc.uploadedOn ? `On ${doc.uploadedOn}` : "Recorded"}</button>
+            <FileSlot storageKey={`employee-${targetEmployeeId}-${doc.type}`} file={doc.file} label={doc.type} disabled={!canEditProfile}
+              onChange={file => editDocRow(index, file
+                ? { file, status: doc.status === "verified" ? "verified" : "uploaded", uploadedOn: file.uploadedOn }
+                : { file: undefined, status: "pending", uploadedOn: undefined })} />
           </div>;
         })}</div>
         <div className="doc-add-row">
@@ -120,7 +125,11 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
           <label><span>IFSC</span><input value={nominee.ifsc} onChange={event => setNominee(current => ({ ...current, ifsc: event.target.value }))}/></label>
           <label><span>Address</span><textarea rows={2} value={nominee.address} onChange={event => setNominee(current => ({ ...current, address: event.target.value }))}/></label>
         </div>
-        <label className="asset-check nominee-photo"><input type="checkbox" checked={nominee.photoOnFile} onChange={event => setNominee(current => ({ ...current, photoOnFile: event.target.checked }))}/><span><strong>Nominee photo collected</strong><small>Physical or scanned copy is on file with HR</small></span></label>
+        <div className="nominee-photo-row">
+          <span><strong>Nominee photo</strong><small>JPG, PNG or PDF, up to 5 MB</small></span>
+          <FileSlot storageKey={`employee-${targetEmployeeId}-nominee-photo`} file={nominee.photo} label="nominee photo" disabled={!canEditProfile}
+            onChange={photo => setNominee(current => ({ ...current, photo, photoOnFile: Boolean(photo) }))} />
+        </div>
       </Panel>
       <Panel title="Additional fields" description="Defined by administrators in Settings → Custom fields.">
         <div className="form-grid">
