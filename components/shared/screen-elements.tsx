@@ -61,8 +61,8 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 
 /* Side panel used by every row-level detail view. Closes on backdrop click
    and on Escape. */
-export function DetailDrawer({ title, subtitle, avatar, onClose, footer, children }: {
-  title: string; subtitle?: string; avatar?: ReactNode; onClose: () => void; footer?: ReactNode; children: ReactNode;
+export function DetailDrawer({ title, subtitle, avatar, onClose, footer, children, wide = false }: {
+  title: string; subtitle?: string; avatar?: ReactNode; onClose: () => void; footer?: ReactNode; children: ReactNode; wide?: boolean;
 }) {
   const panelRef = useRef<HTMLElement>(null);
 
@@ -82,7 +82,7 @@ export function DetailDrawer({ title, subtitle, avatar, onClose, footer, childre
 
   return (
     <div className="drawer-backdrop" onMouseDown={onClose} role="presentation">
-      <aside ref={panelRef} tabIndex={-1} className="detail-drawer" onMouseDown={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
+      <aside ref={panelRef} tabIndex={-1} className={wide ? "detail-drawer wide" : "detail-drawer"} onMouseDown={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <header className="drawer-head">
           {avatar ? <span className="large-avatar">{avatar}</span> : <span />}
           <div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>

@@ -158,11 +158,16 @@ The selected role and screen are stored in the URL, so refresh and browser Back/
 
 ### BMG scope expansion (September 2026)
 
-**Roles and hierarchy**
+**Users & roles (Manage → Users & roles)**
 
-- Eleven roles: Owner, Branch Manager, Operations In-charge, Finance, Finance Assistant, HR, HR Assistant, HR Executive, Field Officer, Guard, Client.
-- Permission sets and default screens come from a role registry; tiers are configurable in Settings → Roles and access (provisional until the client confirms the hierarchy).
-- Test: switch to **Finance** (payroll but no workforce), then **HR Executive** (HR quality landing, no payroll).
+- The sidebar switcher now signs in as a **user** (grouped by role), not a bare role. The URL keeps `?user=` so refresh stays signed in.
+- 24 permission modules (one per screen group, plus "Salary figures & rates" as a data permission), each set to No access / View / Edit.
+- **Roles tab:** reporting tree; add, rename, duplicate, delete roles; set "Reports to" (cycles blocked), "Opens on" screen (only allowed modules listed), and the permission matrix with per-group "Set all". Owner is locked to full access. Built-in roles can be edited but not deleted; roles with users or child roles cannot be deleted.
+- **Users tab:** search and filter; add, edit, disable, delete users; change role; per-user overrides for any module (Inherit / No access / View / Edit) with role level and effective level side by side; "Reset to role". "Sign in as" previews exactly what that user sees.
+- **Enforcement:** sidebar, screen access, bookmarked URLs and the notification bell follow the effective permissions. View-only screens show a banner and block action buttons.
+- **Safety:** at least one active user must always keep edit access to Users & roles; you cannot delete the user you are signed in as.
+- Edits persist in this browser (localStorage `bmg-access-v1`) until the backend exists.
+- Test: Roles → Field Officer → set Tickets to No access → Save. Sign in as **Ajmal Khan** (no Tickets) then **Praveen S** (Tickets kept by his override). As Praveen open **Sites & posts** — view-only banner, "Add site" blocked.
 
 **Onboarding additions**
 

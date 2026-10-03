@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, type MouseEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowsLeftRight, Bell, Buildings, CalendarCheck, CaretDown, ChartBar, ChatCircleText, ClipboardText, ClockCountdown,
-  Coins, FileText, GearSix, HandCoins, House, IdentificationBadge, List, MagnifyingGlass,
-  MapPin, Moon, Package, Plus, ShieldCheck, Star, Sun, UploadSimple, UserFocus,
+  Coins, FileText, GearSix, HandCoins, House, IdentificationBadge, List, LockSimple, MagnifyingGlass,
+  MapPin, Moon, Package, Plus, ShieldCheck, Star, Sun, UploadSimple, UserFocus, UserGear,
   UsersThree, Wallet, WarningCircle, X,
 } from "@phosphor-icons/react";
 import gsap from "gsap";
@@ -20,13 +20,15 @@ import {
   ActionCentreScreen, DetailedWorkflowScreen, EmployeeFormScreen, ExitClearanceScreen,
   NightVigilanceScreen, PayrollAllocationScreen, PenaltiesScreen, SiteConfigurationScreen,
 } from "@/features/workflows/workflow-screens";
+import { AccessScreen } from "@/features/access/access-screen";
+import { AccessProvider, useAccess } from "@/components/shared/access-context";
 import { OpsProvider } from "@/components/shared/ops-context";
 import { ToastProvider, useToast } from "@/components/shared/toast-context";
 import { HrQualityScreen, RecruitmentScreen } from "@/features/hr/hr-quality-screens";
 import { employeeDocuments, employees, guardChanges, satisfactionCalls, spareDutyPayments } from "@/lib/mock-data";
 import { deriveNotifications } from "@/lib/notifications";
-import { allowedViews, roleRegistry } from "@/lib/roles";
-import type { AppNotification, AppView, Role } from "@/types/domain";
+import { effectivePermissions, landingView, type AccessRole } from "@/lib/access";
+import type { AppNotification, AppView } from "@/types/domain";
 
 type IconComponent = typeof House;
 type NavItem = { label: string; view: AppView; icon: IconComponent; badge?: string };
@@ -64,6 +66,7 @@ const internalNavigation: NavGroup[] = [
   ]},
   { label: "Manage", items: [
     { label: "Import centre", view: "imports", icon: UploadSimple },
+    { label: "Users & roles", view: "access", icon: UserGear },
     { label: "Settings", view: "settings", icon: GearSix },
   ]},
 ];
@@ -90,25 +93,17 @@ const clientNavigation: NavGroup[] = [{ label: "Client portal", items: [
   { label: "Coverage", view: "client-coverage", icon: ChartBar },
 ]}];
 
-const roleDefaults: Record<Role, AppView> = {
-  ...Object.fromEntries(Object.values(roleRegistry).map(def => [def.name, def.defaultView])),
-  Guard: "guard-home",
-  Client: "client-home",
-} as Record<Role, AppView>;
-
-const roleNames: Record<Role, { name: string; initials: string }> = {
-  ...Object.fromEntries(Object.values(roleRegistry).map(def => [def.name, def.displayUser])),
-  Guard: { name: "Suresh Babu", initials: "SB" },
-  Client: { name: "Lulu Group", initials: "LG" },
-} as Record<Role, { name: string; initials: string }>;
-
 export function HrmsApp() {
-  return <ToastProvider><OpsProvider><HrmsShell /></OpsProvider></ToastProvider>;
+  return <ToastProvider><AccessProvider><OpsProvider><HrmsShell /></OpsProvider></AccessProvider></ToastProvider>;
 }
 
 function HrmsShell() {
-  const [role, setRole] = useState<Role>("Owner");
-  const [view, setView] = useState<AppView>("dashboard");
+  const { users, roles, currentUser, currentRole, canOpen, canEdit, landing, signInAs } = useAccess();
+  const portal = currentRole.kind;
+  const [requestedView, setView] = useState<AppView>("dashboard");
+  // A view the user may not open (bookmarked URL, permission just removed) falls back to their landing screen.
+  const view = canOpen(requestedView) ? requestedView : landing;
+  const readOnly = portal === "internal" && !canEdit(view);
   const [dark, setDark] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -117,41 +112,33 @@ function HrmsShell() {
   const [allocationEmployeeId, setAllocationEmployeeId] = useState<string | null>(null);
   const [selectedSite, setSelectedSite] = useState<string | null>(null);
   const [siteInitialTab, setSiteInitialTab] = useState<"profile"|"salary">("profile");
-  const [activeGuard, setActiveGuard] = useState<GuardUser>({ id: "BMG-1840", name: "Suresh Babu", initials: "SB" });
+  const [guestGuard, setGuestGuard] = useState<GuardUser | null>(null);
+  const activeGuard: GuardUser = guestGuard ?? { id: currentUser.employeeId ?? currentUser.id, name: currentUser.name, initials: currentUser.initials };
   const [search, setSearch] = useState("");
   const contentRef = useRef<HTMLDivElement>(null);
   const notify = useToast();
   const notifications = useMemo(() => {
+    if (portal !== "internal") return [];
     const derived = deriveNotifications({
       today: "2026-09-22",
       employees, documents: employeeDocuments, guardChanges, spareDutyPayments,
       satisfactionCalls, sopEdits: [],
     });
     const generics: AppNotification[] = [
-      { id:"gen-sla", kind:"complaint-sla", title:"Complaint SLA due soon", detail:"CMP-26091 · TCS Technopark · due 16:00", audience:["Owner","Branch Manager","Operations In-charge","Field Officer"], targetView:"complaints", at:"2026-09-22" },
-      { id:"gen-payroll", kind:"generic", title:"Payroll exceptions ready", detail:"August 2026 · 3 configuration exceptions", audience:["Owner","Branch Manager","HR","Finance","Finance Assistant"], targetView:"payroll", at:"2026-09-22" },
+      { id:"gen-sla", kind:"complaint-sla", title:"Complaint SLA due soon", detail:"CMP-26091 · TCS Technopark · due 16:00", audience:[], targetView:"complaints", at:"2026-09-22" },
+      { id:"gen-payroll", kind:"generic", title:"Payroll exceptions ready", detail:"August 2026 · 3 configuration exceptions", audience:[], targetView:"payroll", at:"2026-09-22" },
     ];
-    return [...derived, ...generics].filter(item => item.audience.includes(role));
-  }, [role]);
+    return [...derived, ...generics].filter(item => canOpen(item.targetView));
+  }, [portal, canOpen]);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
+    const timer = window.setTimeout(() => {
       const savedTheme = window.localStorage.getItem("bmg-theme");
       setDark(savedTheme === "dark" || (!savedTheme && window.matchMedia("(prefers-color-scheme: dark)").matches));
-      const params = new URLSearchParams(window.location.search);
-      const initialRole = params.get("role") as Role | null;
-      if (initialRole && initialRole in roleDefaults) {
-        setRole(initialRole);
-        const requestedView = params.get("view") as AppView | null;
-        const roleAllowsView = requestedView && (
-          (initialRole === "Guard" && requestedView.startsWith("guard-")) ||
-          (initialRole === "Client" && requestedView.startsWith("client-")) ||
-          (initialRole !== "Guard" && initialRole !== "Client" && allowedViews(initialRole).includes(requestedView))
-        );
-        setView(roleAllowsView && requestedView ? requestedView : roleDefaults[initialRole]);
-      }
+      const requested = new URLSearchParams(window.location.search).get("view") as AppView | null;
+      if (requested) setView(requested);
     });
-    return () => window.cancelAnimationFrame(frame);
+    return () => window.clearTimeout(timer);
   }, []);
 
   useLayoutEffect(() => {
@@ -160,7 +147,7 @@ function HrmsShell() {
       gsap.from("[data-enter]", { y: 10, opacity: 0, duration: .34, stagger: .025, ease: "power2.out" });
     }, contentRef);
     return () => context.revert();
-  }, [view, role]);
+  }, [view, currentUser.id]);
 
   // Overlays render outside `.app`, so the theme flag also lives on <html>.
   useEffect(() => {
@@ -168,12 +155,12 @@ function HrmsShell() {
   }, [dark]);
 
   const groups = useMemo(() => {
-    if (role === "Guard") return guardNavigation;
-    if (role === "Client") return clientNavigation;
+    if (portal === "guard") return guardNavigation;
+    if (portal === "client") return clientNavigation;
     return internalNavigation
-      .map(group => ({ ...group, items: group.items.filter(item => allowedViews(role).includes(item.view)) }))
+      .map(group => ({ ...group, items: group.items.filter(item => canOpen(item.view)) }))
       .filter(group => group.items.length);
-  }, [role]);
+  }, [portal, canOpen]);
 
   const navigate = (nextView: string) => {
     setView(nextView as AppView);
@@ -184,14 +171,26 @@ function HrmsShell() {
     window.history.replaceState({}, "", url);
   };
 
-  const changeRole = (nextRole: Role) => {
-    setRole(nextRole);
-    setView(roleDefaults[nextRole]);
-    const url = new URL(window.location.href);
-    url.searchParams.set("role", nextRole);
-    url.searchParams.set("view", roleDefaults[nextRole]);
-    window.history.replaceState({}, "", url);
-    notify(`Switched to ${nextRole} workspace`);
+  const switchUser = (userId: string) => {
+    const user = users.find(item => item.id === userId);
+    const role = roles.find(item => item.id === user?.roleId);
+    if (!user || !role) return;
+    signInAs(user.id);
+    setGuestGuard(null);
+    navigate(landingView(role, effectivePermissions(role, user)));
+    notify(`Signed in as ${user.name} · ${role.name}`);
+  };
+
+  // View-only screens keep reading and navigation, but block the action buttons.
+  const blockReadOnlyActions = (event: MouseEvent<HTMLDivElement>) => {
+    if (!readOnly) return;
+    const button = (event.target as HTMLElement).closest("button");
+    if (!button || button.hasAttribute("data-allow")) return;
+    if (button.matches(".primary-button, .secondary-button.compact")) {
+      event.preventDefault();
+      event.stopPropagation();
+      notify("View-only access — ask an administrator for edit rights");
+    }
   };
 
   const toggleTheme = () => {
@@ -220,11 +219,14 @@ function HrmsShell() {
           <button className="mobile-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X /></button>
         </div>
         <label className="profile-card">
-          <span className="avatar">{role === "Guard" ? activeGuard.initials : roleNames[role].initials}</span>
-          <span className="profile-copy"><strong>{role === "Guard" ? activeGuard.name : roleNames[role].name}</strong><span>{role}</span></span>
+          <span className="avatar">{portal === "guard" ? activeGuard.initials : currentUser.initials}</span>
+          <span className="profile-copy"><strong>{portal === "guard" ? activeGuard.name : currentUser.name}</strong><span>{currentRole.name}</span></span>
           <CaretDown size={14} />
-          <select value={role} onChange={event => changeRole(event.target.value as Role)} aria-label="Switch workspace role">
-            {(Object.keys(roleDefaults) as Role[]).map(item => <option key={item}>{item}</option>)}
+          <select value={currentUser.id} onChange={event => switchUser(event.target.value)} aria-label="Sign in as user">
+            {roles.map(role => {
+              const members = users.filter(user => user.roleId === role.id && user.status === "active");
+              return members.length ? <optgroup key={role.id} label={role.name}>{members.map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</optgroup> : null;
+            })}
           </select>
         </label>
         <nav aria-label="Main navigation" className="sidebar-nav">
@@ -235,9 +237,9 @@ function HrmsShell() {
             </button>)}
           </div>)}
         </nav>
-        <button className="sidebar-foot" onClick={() => navigate(role === "Guard" ? "guard-punch" : role === "Client" ? "client-complaints" : "action-centre")}>
+        <button className="sidebar-foot" onClick={() => navigate(portal === "guard" ? "guard-punch" : portal === "client" ? "client-complaints" : "action-centre")}>
           <span className="support-icon"><WarningCircle size={19} /></span>
-          <span><strong>Need attention</strong><small>{role === "Client" ? "1 request awaiting update" : "3 payroll exceptions"}</small></span>
+          <span><strong>Need attention</strong><small>{portal === "client" ? "1 request awaiting update" : `${notifications.length} open alerts`}</small></span>
         </button>
       </aside>
 
@@ -265,8 +267,14 @@ function HrmsShell() {
           </div>
         </header>
 
-        <div className="page" ref={contentRef}>
-          {renderView(view, role, navigate, openAction, editingEmployeeId, openEmployeeForm, allocationEmployeeId, openAllocationAudit, selectedSite, openSiteConfig, siteInitialTab, activeGuard, user => { setActiveGuard(user); notify(`Signed in as ${user.name}`); navigate("guard-home"); })}
+        <div className={readOnly ? "page read-only" : "page"} ref={contentRef} onClickCapture={blockReadOnlyActions}>
+          {readOnly && <div className="readonly-banner" data-enter><LockSimple /><span><strong>View only.</strong> You can read this screen; changes need edit access to this module.</span></div>}
+          {renderView(view, currentRole, navigate, openAction, editingEmployeeId, openEmployeeForm, allocationEmployeeId, openAllocationAudit, selectedSite, openSiteConfig, siteInitialTab, canOpen, activeGuard, guard => {
+            const registered = users.find(user => user.employeeId === guard.id && user.status === "active");
+            if (registered) { signInAs(registered.id); setGuestGuard(null); } else setGuestGuard(guard);
+            notify(`Signed in as ${guard.name}`);
+            navigate("guard-home");
+          })}
         </div>
       </main>
 
@@ -275,7 +283,7 @@ function HrmsShell() {
   );
 }
 
-function renderView(view: AppView, role: Role, navigate: (view: string) => void, openAction: (name: string) => void, editingEmployeeId:string|null, openEmployeeForm:(employeeId:string|null)=>void, allocationEmployeeId:string|null, openAllocationAudit:(employeeId?:string)=>void, selectedSite:string|null, openSiteConfig:(site:string|null,tab?:"profile"|"salary")=>void, siteInitialTab:"profile"|"salary", activeGuard?:GuardUser, onSwitchUser?:(user:GuardUser)=>void) {
+function renderView(view: AppView, role: AccessRole, navigate: (view: string) => void, openAction: (name: string) => void, editingEmployeeId:string|null, openEmployeeForm:(employeeId:string|null)=>void, allocationEmployeeId:string|null, openAllocationAudit:(employeeId?:string)=>void, selectedSite:string|null, openSiteConfig:(site:string|null,tab?:"profile"|"salary")=>void, siteInitialTab:"profile"|"salary", canOpen:(view:AppView)=>boolean, activeGuard?:GuardUser, onSwitchUser?:(user:GuardUser)=>void) {
   if (view === "guard-vigilance") return <NightVigilanceScreen guardMode onBack={() => navigate("guard-home")} />;
   if (view.startsWith("guard-")) return <GuardPortal view={view} onNavigate={next => navigate(next)} activeGuard={activeGuard} onSwitchUser={onSwitchUser} />;
   if (view.startsWith("client-")) return <ClientPortal view={view} onNavigate={next => navigate(next)} />;
@@ -294,24 +302,25 @@ function renderView(view: AppView, role: Role, navigate: (view: string) => void,
     case "sops": return <SopsScreen onCreate={() => navigate("sop-form")} />;
     case "reports": return <ReportsScreen />;
     case "imports": return <ImportsScreen />;
-    case "settings": return <SettingsScreen />;
+    case "settings": return <SettingsScreen onOpenAccess={() => navigate("access")} />;
     case "employee-form": return <EmployeeFormScreen employeeId={editingEmployeeId} onBack={() => navigate("workforce")} onImport={() => navigate("imports")} />;
-    case "site-config": return <SiteConfigurationScreen role={role} siteName={selectedSite} initialTab={siteInitialTab} onBack={() => navigate(role==="HR"||role==="Finance"?"payroll":"sites")} />;
+    case "site-config": return <SiteConfigurationScreen role={role.name} siteName={selectedSite} initialTab={siteInitialTab} onBack={() => navigate(canOpen("sites") ? "sites" : "payroll")} />;
     case "payroll-allocation": return <PayrollAllocationScreen employeeId={allocationEmployeeId} onBack={() => navigate("payroll")} />;
     case "night-vigilance": return <NightVigilanceScreen onBack={() => navigate("dashboard")} />;
     case "exit-clearance": return <ExitClearanceScreen onBack={() => navigate("workforce")} />;
-    case "penalties": return <PenaltiesScreen role={role} onBack={() => navigate("payroll")} />;
+    case "penalties": return <PenaltiesScreen onBack={() => navigate("payroll")} />;
     case "spare-payments": return <SparePaymentsScreen />;
     case "hr-quality": return <HrQualityScreen />;
     case "recruitment": return <RecruitmentScreen />;
     case "tickets": return <TicketsScreen />;
     case "analytics": return <AnalyticsScreen />;
+    case "access": return <AccessScreen />;
     case "action-centre": return <ActionCentreScreen onBack={() => navigate("dashboard")} />;
-    case "assignment-form": return <DetailedWorkflowScreen kind="assignment" role={role} onBack={() => navigate("deployment")} />;
+    case "assignment-form": return <DetailedWorkflowScreen kind="assignment" onBack={() => navigate("deployment")} />;
     case "attendance-correction": return <DetailedWorkflowScreen kind="attendance" onBack={() => navigate("attendance")} />;
     case "uniform-issue": return <DetailedWorkflowScreen kind="uniform" onBack={() => navigate("uniforms")} />;
     case "inspection-form": return <DetailedWorkflowScreen kind="inspection" onBack={() => navigate("inspections")} />;
-    case "complaint-form": return <DetailedWorkflowScreen kind="complaint" onBack={() => navigate(role === "Client" ? "client-complaints" : "complaints")} />;
+    case "complaint-form": return <DetailedWorkflowScreen kind="complaint" onBack={() => navigate(role.kind === "client" ? "client-complaints" : "complaints")} />;
     case "sop-form": return <DetailedWorkflowScreen kind="sop" onBack={() => navigate("sops")} />;
     default: return <DashboardScreen onNavigate={navigate} />;
   }

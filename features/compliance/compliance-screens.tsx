@@ -10,7 +10,6 @@ import {
   exportTemplates, lateAndAbsent, payrollRows, rupees, sites, sopDocuments, uniformPlans,
 } from "@/lib/mock-data";
 import { applyTemplate, toCsv } from "@/lib/export-mapper";
-import { internalRoles, roleRegistry } from "@/lib/roles";
 import type { CustomFieldDef, ExportColumn, ExportTemplate } from "@/types/domain";
 import {
   DefRows, DetailDrawer, PageHeader, Panel, StatStrip, Status, Timeline, Toolbar,
@@ -359,7 +358,7 @@ export function ImportsScreen() {
   </>;
 }
 
-export function SettingsScreen() {
+export function SettingsScreen({ onOpenAccess }: { onOpenAccess: () => void }) {
   const notify=useToast();
   const [radius,setRadius]=useState(100);
   const [unit,setUnit]=useState("0.25");
@@ -370,7 +369,6 @@ export function SettingsScreen() {
   const [docTypes,setDocTypes]=useState<string[]>(documentChecklistSeed);
   const [newDocType,setNewDocType]=useState("");
   const [fieldDefs,setFieldDefs]=useState<CustomFieldDef[]>(customFieldSeed);
-  const [tiers,setTiers]=useState<Record<string,number>>(Object.fromEntries(internalRoles.map(name=>[name,roleRegistry[name].tier])));
   return <>
     <PageHeader title="Settings" description="Effective-dated defaults with client, site, post and employee overrides." actions={<button className="primary-button" onClick={()=>{setSaved(true);notify(`${group} settings saved`);setTimeout(()=>setSaved(false),1800)}}><CheckCircle/>{saved?"Saved":"Save changes"}</button>}/>
     <div className="settings-layout">
@@ -421,14 +419,9 @@ export function SettingsScreen() {
           </div>
           <label><span>PF/ESI alert window</span><div className="input-suffix"><input type="number" defaultValue="15"/><b>days after joining</b></div><small>HR is alerted when enrolment data has not arrived inside this window.</small></label>
         </div>}
-        {group==="Roles and access"&&<div className="role-tier-table">
-          <div className="role-tier-head"><span>Role</span><span>Default view</span><span>Tier</span></div>
-          {internalRoles.map(name=><div className="role-tier-row" key={name}>
-            <strong>{name}</strong>
-            <span>{roleRegistry[name].defaultView}</span>
-            <select value={tiers[name]} onChange={event=>{ setTiers(current=>({ ...current, [name]:Number(event.target.value) })); notify(`${name} moved to tier ${event.target.value}`); }} aria-label={`${name} tier`}>{[0,1,2,3,4].map(tier=><option key={tier} value={tier}>Tier {tier}</option>)}</select>
-          </div>)}
-          <div className="inline-alert" style={{ margin:"14px 19px" }}><Status tone="info">Provisional</Status><span>Hierarchy is provisional — update tiers when the client confirms the reporting structure. Guard and Client stay restricted to their own portals.</span></div>
+        {group==="Roles and access"&&<div className="settings-access-pointer">
+          <p>Roles, their reporting line and per-module permissions — plus individual users and their overrides — are managed on the Users &amp; roles screen.</p>
+          <button className="secondary-button" data-allow onClick={onOpenAccess}>Open Users &amp; roles</button>
         </div>}
         <div className="inheritance-chain"><strong>Configuration inheritance</strong><div><span>Organization</span><b>›</b><span>Client</span><b>›</b><span>Site</span><b>›</b><span>Post</span><b>›</b><span>Employee</span></div><p>The most specific effective rule is used. Every override retains its source and start date.</p></div>
       </Panel>

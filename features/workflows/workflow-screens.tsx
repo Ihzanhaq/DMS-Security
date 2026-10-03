@@ -13,8 +13,8 @@ import { customFieldDefs, documentChecklist, employeeDocuments, employees as emp
 import { useOps } from "@/components/shared/ops-context";
 import { usePayroll } from "@/components/shared/payroll-context";
 import { keralaDistricts, keralaTaluks } from "@/lib/kerala-geo";
-import { canManageSalary } from "@/lib/roles";
-import type { BenefitOverride, BenefitScheme, EmployeeDocument, EmployeeDocumentStatus, EscalationContact, LatLng, PayBasis, Role, SiteDocument, SiteDocumentKind, SiteFeedback } from "@/types/domain";
+import { useAccess } from "@/components/shared/access-context";
+import type { BenefitOverride, BenefitScheme, EmployeeDocument, EmployeeDocumentStatus, EscalationContact, LatLng, PayBasis, SiteDocument, SiteDocumentKind, SiteFeedback } from "@/types/domain";
 
 const districts = keralaDistricts;
 const employees = ["Suresh Babu", "Fathima N", "Rajeev Kumar", "Anzar M", "Shamnad C M"];
@@ -143,12 +143,14 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
   </>;
 }
 
-export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: { onBack: () => void; role:Role; siteName?:string|null; initialTab?:"profile"|"salary" }) {
+export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: { onBack: () => void; role:string; siteName?:string|null; initialTab?:"profile"|"salary" }) {
   const selectedSite = siteName ?? "Lulu Mall, Kochi";
   const siteRecord = siteRecords.find(item => item.name === selectedSite) ?? siteRecords[0];
   const { siteRules, postRules, updateSiteRule, updatePostRule } = usePayroll();
   const existingSiteRule = siteRules.filter(rule=>rule.site===selectedSite).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
-  const salaryManager = canManageSalary(role);
+  const { can } = useAccess();
+  const salaryManager = can("salary", "view");
+  const salaryEditor = can("salary", "edit");
   const [tab, setTab] = useState(initialTab === "salary" && salaryManager ? "Salary and benefits" : "Site profile");
   const [saved, setSaved] = useState(false);
   const [latitude, setLatitude] = useState(siteRecord.lat);
@@ -190,7 +192,7 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
   return <>
     <PageHeader title="Site and post configuration" description="Location, staffing, benefit inheritance and attendance controls."
       actions={<><BackButton onBack={onBack}/><button className="primary-button" onClick={() => {
-        if(salaryManager){ updateSiteRule({ site:selectedSite, effectiveFrom:salaryEffectiveFrom, defaultDutyRate:siteRate||undefined, scheme }); posts.forEach(post=>updatePostRule(post.rate ? { site:selectedSite, post:post.name, effectiveFrom:salaryEffectiveFrom, dutyRate:Number(post.rate) } : null, selectedSite, post.name, salaryEffectiveFrom)); }
+        if(salaryEditor){ updateSiteRule({ site:selectedSite, effectiveFrom:salaryEffectiveFrom, defaultDutyRate:siteRate||undefined, scheme }); posts.forEach(post=>updatePostRule(post.rate ? { site:selectedSite, post:post.name, effectiveFrom:salaryEffectiveFrom, dutyRate:Number(post.rate) } : null, selectedSite, post.name, salaryEffectiveFrom)); }
         if (docsDirty) {
           setDocs(current => current.map(doc => ({ ...doc, updatedOn: "2026-09-22", updatedBy: role })));
           setDocsDirty(false);
@@ -504,13 +506,13 @@ export function ExitClearanceScreen({ onBack }: { onBack: () => void }) {
   </>;
 }
 
-export function PenaltiesScreen({ onBack, role = "Owner" }: { onBack: () => void; role?: Role }) {
+export function PenaltiesScreen({ onBack }: { onBack: () => void }) {
   const notifyPenalty = useToast();
   const [employee, setEmployee] = useState("Fathima N");
   const [complaint, setComplaint] = useState("CL-1082 · Sleeping at assigned post");
   const [applied, setApplied] = useState(false);
   const duplicate = employee === "Rajeev Kumar";
-  const admin = canManageSalary(role);
+  const admin = useAccess().can("salary", "edit");
   const [exceptionEmployee, setExceptionEmployee] = useState("BMG-1840");
   const [exceptionAmount, setExceptionAmount] = useState(500);
   const [exceptionReason, setExceptionReason] = useState("");
@@ -537,7 +539,7 @@ export function PenaltiesScreen({ onBack, role = "Owner" }: { onBack: () => void
           <label><span>Deduction amount</span><div className="input-prefix"><b>₹</b><input type="number" min={1} value={exceptionAmount} onChange={event => setExceptionAmount(Number(event.target.value))}/></div></label>
           <label><span>Reason</span><textarea rows={3} value={exceptionReason} onChange={event => setExceptionReason(event.target.value)} placeholder="Why this exception applies (kept in the audit history)"/></label>
           <label><span>Effective payroll</span><input type="month" defaultValue="2026-09"/></label>
-          {!admin && <div className="inline-alert warning"><WarningCircle/><span>Only Owner, Branch Manager, Finance or HR can create an office exception deduction.</span></div>}
+          {!admin && <div className="inline-alert warning"><WarningCircle/><span>Office exception deductions need edit access to Salary figures &amp; rates.</span></div>}
           {exceptionSaved && <SavedNotice>Office exception deduction recorded · appears in payroll as &quot;office-exception&quot;.</SavedNotice>}
           <button className="primary-button" disabled={!admin || exceptionSaved || !exceptionReason.trim()} onClick={() => { setExceptionSaved(true); notifyPenalty("Office exception deduction recorded"); }}><Wallet/>{exceptionSaved ? "Deduction recorded" : "Create exception deduction"}</button>
         </div>
@@ -585,7 +587,7 @@ const workflowConfig: Record<WorkflowKind, { title: string; description: string;
   sop: { title: "Create site SOP", description: "Publish versioned post instructions and acknowledgement rules.", submit: "Publish SOP", icon: FileText },
 };
 
-export function DetailedWorkflowScreen({ kind, onBack, role = "Owner" }: { kind: WorkflowKind; onBack: () => void; role?:Role }) {
+export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; onBack: () => void }) {
   const { employeeRules, siteRules, postRules } = usePayroll();
   const config = workflowConfig[kind];
   const Icon = config.icon;
@@ -601,7 +603,7 @@ export function DetailedWorkflowScreen({ kind, onBack, role = "Owner" }: { kind:
   const effectivePostRule=postRules.filter(item=>item.site===assignmentSite&&item.post===assignmentPost&&item.effectiveFrom<=assignmentDate).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
   const resolvedSource=effectiveEmployeeRule?.basis==="monthly"?"Monthly":effectiveEmployeeRule?.basis==="daily"?"Daily":effectivePostRule?"Post":effectiveSiteRule?.defaultDutyRate?"Site":"Missing";
   const resolvedRate=effectiveEmployeeRule?.basis==="monthly"?(effectiveEmployeeRule.monthlySalary??0)/effectiveEmployeeRule.payableDays:effectiveEmployeeRule?.basis==="daily"?(effectiveEmployeeRule.dailyRate??0):effectivePostRule?.dutyRate??effectiveSiteRule?.defaultDutyRate??0;
-  const canSeeSalary=canManageSalary(role);
+  const canSeeSalary=useAccess().can("salary","view");
   const pfEnabled=effectiveEmployeeRule?.pfOverride==="enabled"||(effectiveEmployeeRule?.pfOverride==="inherit"&&effectiveSiteRule?.scheme==="pf-esi");
   const esiEnabled=effectiveEmployeeRule?.esiOverride==="enabled"||(effectiveEmployeeRule?.esiOverride==="inherit"&&(effectiveSiteRule?.scheme==="pf-esi"||effectiveSiteRule?.scheme==="esi"));
   const toggleKit = (item: string) => setKit(current => {
