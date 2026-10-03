@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { DownloadSimple, Funnel, Plus, UploadSimple, UserCheck, UserMinus, UsersThree } from "@phosphor-icons/react";
-import { employees, relieverRates, rupees, skillOptions } from "@/lib/mock-data";
+import { employees, ratings, relieverRates, rupees, skillOptions } from "@/lib/mock-data";
 import { DefRows, DetailDrawer, PageHeader, Panel, PersonCell, SkillTags, StatStrip, Status, Toolbar } from "@/components/shared/screen-elements";
 import { usePayroll } from "@/components/shared/payroll-context";
 import { payBasisLabel } from "@/lib/payroll-calculator";
@@ -15,6 +15,10 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate:(
   const [selected,setSelected]=useState<(typeof employees)[number] | null>(null);
   const { employeeRules } = usePayroll();
   const ruleFor = (employeeId:string) => employeeRules.filter(rule => rule.employeeId === employeeId).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+  const ratingFor = (employeeId:string) => {
+    const scores = ratings.filter(rating => rating.targetType === "employee" && rating.targetId === employeeId).map(rating => rating.score);
+    return scores.length ? Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length * 10) / 10 : null;
+  };
 
   const rows=useMemo(()=>employees.filter(employee=>
     (status==="All status" || employee.status===status) &&
@@ -39,12 +43,13 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate:(
       <span className="toolbar-count">{rows.length} employees</span>
     </Toolbar>
     <Panel className="table-panel">
-      <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Employee</th><th>Role</th><th>District</th><th>Current site</th><th>Shift</th><th>Capabilities</th><th>Pay basis</th><th>Benefits</th><th>Status</th></tr></thead>
+      <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Employee</th><th>Role</th><th>District</th><th>Current site</th><th>Shift</th><th>Capabilities</th><th>Pay basis</th><th>Benefits</th><th>Rating</th><th>Status</th></tr></thead>
       <tbody>{rows.map(employee=><tr key={employee.id} onClick={()=>setSelected(employee)} tabIndex={0} onKeyDown={event=>{if(event.key==="Enter")setSelected(employee)}}>
-        <td><PersonCell name={employee.name} id={employee.id}/></td><td>{employee.role}</td><td>{employee.district}</td><td>{employee.site}</td><td>{employee.shift}</td>
+        <td><PersonCell name={employee.name} id={employee.id} phone={employee.phone}/></td><td>{employee.role}</td><td>{employee.district}</td><td>{employee.site}</td><td>{employee.shift}</td>
         <td><SkillTags skills={employee.skills}/></td>
         <td>{(() => { const rule=ruleFor(employee.id); return rule?.basis === "site" ? "Site-wise rate" : rule?.basis === "daily" ? `${rupees(rule.dailyRate ?? 0)} / duty` : rupees(rule?.monthlySalary ?? employee.salary); })()}</td>
         <td><span className="benefit-list">{(() => { const rule=ruleFor(employee.id); return rule?.pfOverride === "inherit" && rule?.esiOverride === "inherit" ? <span>By site</span> : <>{rule?.pfOverride === "enabled"&&<b>PF</b>}{rule?.esiOverride === "enabled"&&<b>ESI</b>}{rule?.pfOverride === "disabled"&&rule?.esiOverride === "disabled"&&<span>Salary only</span>}</>; })()}</span></td>
+        <td>{(() => { const rating=ratingFor(employee.id); return rating !== null ? <strong>{rating}/10</strong> : <span style={{ color:"var(--muted)" }}>—</span>; })()}</td>
         <td><Status tone={employee.status==="Active"?"success":employee.status==="Leave"?"warning":"info"}>{employee.status}</Status></td>
       </tr>)}</tbody></table>{rows.length===0&&<div className="empty-state"><UsersThree size={28}/><strong>No employees found</strong><span>Try changing the search, status or skill filter.</span></div>}</div>
     </Panel>
@@ -65,7 +70,7 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate:(
           { label:"Site", value:selected.site },
           { label:"District", value:selected.district },
           { label:"Shift", value:selected.shift },
-          { label:"Phone", value:selected.phone, mono:true },
+          { label:"Phone", value:<a className="tel-link" href={`tel:${selected.phone.replace(/\s/g, "")}`}>{selected.phone}</a>, mono:true },
         ]}/>
       </div>
       <div className="drawer-section">

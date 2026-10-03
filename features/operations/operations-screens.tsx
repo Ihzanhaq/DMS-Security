@@ -6,7 +6,8 @@ import {
   MapPin, NavigationArrow, Plus, Timer, Trash, UserFocus, UsersThree,
   WarningCircle,
 } from "@phosphor-icons/react";
-import { attendanceRows, employees, inspections, rotationSplit, rupees, sites } from "@/lib/mock-data";
+import { attendanceRows, dutyChangeRequests, employees, foTasks, guardChanges, inspections, ratings, rotationSplit, rupees, sites } from "@/lib/mock-data";
+import type { DutyChangeRequest, FoTask, GuardChangeEvent } from "@/types/domain";
 import {
   DefRows, DetailDrawer, PageHeader, Panel, PersonCell, ProgressBar,
   SkillTags, StatStrip, Status, Timeline, Toolbar,
@@ -28,7 +29,7 @@ export function SitesScreen({ onCreate, onConfigure }: { onCreate:()=>void; onCo
     <Toolbar><select value={district} onChange={event=>setDistrict(event.target.value)} aria-label="District">{districts.map(item=><option key={item}>{item}</option>)}</select><button className="secondary-button" onClick={()=>setDistrict("All districts")}><Funnel/>Reset</button><span className="toolbar-count">{visible.length} sites shown</span></Toolbar>
     <div className="site-grid">{visible.map(site=><article className="site-card" key={site.name}>
       <header><span className="small-icon blue"><Buildings size={19}/></span><div><h3>{site.name}</h3><p>{site.client} · {site.district}</p></div><Status tone={site.coverage===100?"success":"warning"}>{site.coverage}% staffed</Status></header>
-      <dl><div><dt>Posts</dt><dd>{site.staffed} / {site.posts}</dd></div><div><dt>Benefit default</dt><dd>{site.scheme}</dd></div><div><dt>Geofence</dt><dd>{site.radius} metres</dd></div></dl>
+      <dl><div><dt>Posts</dt><dd>{site.staffed} / {site.posts}</dd></div><div><dt>Benefit default</dt><dd>{site.scheme}</dd></div><div><dt>Geofence</dt><dd>{site.polygon?`Polygon · ${site.polygon.length} corners`:`${site.radius} metres`}</dd></div><div><dt>Rating</dt><dd>{(()=>{const scores=ratings.filter(rating=>rating.targetType==="site"&&rating.targetId===site.name).map(rating=>rating.score);return scores.length?`${Math.round(scores.reduce((sum,value)=>sum+value,0)/scores.length*10)/10}/10`:"—";})()}</dd></div></dl>
       <ProgressBar value={site.coverage}/>
       <footer><button className="text-button" onClick={()=>onConfigure(site.name)}>Open site</button><button className="secondary-button compact" onClick={()=>onConfigure(site.name)}><MapPin/>Edit boundary</button></footer>
     </article>)}</div>
@@ -49,15 +50,19 @@ export function DeploymentScreen({ onAssign }: { onAssign:()=>void }) {
     {site:"Lake Palace Resort",post:"Lobby · Night",required:2,assigned:["Anzar M","Reliever needed"],state:"Vacant"},
     {site:"Lulu Mall, Kochi",post:"Loading bay · Day",required:2,assigned:["Hareendrakumar K","Niyas P"],state:"Covered"},
   ]);
+  const [changes,setChanges]=useState<GuardChangeEvent[]>(guardChanges);
 
   function assign(post:Post, name:string) {
+    const outgoing=post.assigned.find(entry=>entry.includes("needed"))?"Vacant post":post.assigned[post.assigned.length-1]??"Vacant post";
     setPosts(current=>current.map(item=>{
       if(item.site+item.post!==post.site+post.post) return item;
       const filled=item.assigned.filter(entry=>!entry.includes("needed")).concat(name);
       return { ...item, assigned:filled, state:filled.length>=item.required?"Covered":"Vacant" };
     }));
+    setChanges(current=>[{ id:`GC-${Date.now()}`, site:post.site, post:post.post, outgoing, incoming:name, at:"2026-09-22 09:30" },...current]);
     setManaging(null);
-    notify(`${name} assigned to ${post.post} at ${post.site}`);
+    const officer=sites.find(site=>site.name===post.site)?.fieldOfficers[0]??"Field officer";
+    notify(`${name} assigned · ${officer} notified of the guard change`);
   }
 
   return <>
@@ -79,8 +84,49 @@ export function DeploymentScreen({ onAssign }: { onAssign:()=>void }) {
       </Panel>
     </div>
 
+    <Panel title="Recent guard changes" description="Every change automatically notifies the site's field officer.">
+      <div className="guard-change-list">{changes.map(change=><div className="guard-change-row" key={change.id}>
+        <div><strong>{change.site}</strong><small>{change.post}</small></div>
+        <span className="change-flow">{change.outgoing} <b>→</b> {change.incoming}</span>
+        <span className="change-time">{change.at}</span>
+        <button className="secondary-button compact" onClick={()=>{const match=posts.find(item=>item.site===change.site);if(match)setManaging(match);}}>Edit details</button>
+      </div>)}</div>
+    </Panel>
+
     {managing&&<AssignmentDrawer post={managing} onAssign={assign} onClose={()=>setManaging(null)}/>}
     {rotationOpen&&<RotationDrawer onClose={()=>setRotationOpen(false)}/>}
+  </>;
+}
+
+export function DutyChangesScreen() {
+  const notify=useToast();
+  const [rows,setRows]=useState<DutyChangeRequest[]>(dutyChangeRequests);
+  const decide=(id:string,status:"approved"|"rejected")=>{
+    const row=rows.find(item=>item.id===id);
+    setRows(current=>current.map(item=>item.id===id?{ ...item, status }:item));
+    notify(status==="approved"
+      ? row?.type==="replacement" ? "Replacement approved · reliever pool opened" : row?.type==="ot" ? "Additional duty approved for payroll" : "Shift swap approved"
+      : "Request rejected");
+  };
+  const pending=rows.filter(item=>item.status==="pending").length;
+  const employeeOf=(id:string)=>employees.find(item=>item.id===id);
+  return <>
+    <PageHeader title="Duty changes" description="Swap, replacement and additional-duty (OT) requests raised from the guard app."/>
+    <StatStrip items={[
+      {icon:UsersThree,value:String(pending),label:"Awaiting decision",note:"Raised from mobile",tone:pending?"orange":"green"},
+      {icon:Check,value:String(rows.filter(item=>item.status==="approved").length),label:"Approved",note:"This month",tone:"green"},
+      {icon:Clock,value:String(rows.filter(item=>item.type==="ot").length),label:"OT records",note:"Additional duty hours",tone:"violet"},
+      {icon:WarningCircle,value:String(rows.filter(item=>item.reason==="sick"||item.reason==="accident").length),label:"Sick / accident",note:"Replacement needed",tone:"red"},
+    ]}/>
+    <Panel className="table-panel"><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Employee</th><th>Type</th><th>Date</th><th>Site</th><th>Reason</th><th>Details</th><th>Status</th><th>Decision</th></tr></thead><tbody>
+      {rows.map(row=>{const employee=employeeOf(row.employeeId);return <tr key={row.id}>
+        <td><PersonCell name={employee?.name??row.employeeId} id={row.employeeId} phone={employee?.phone}/></td>
+        <td>{row.type==="ot"?`OT · ${row.hours} h`:row.type==="swap"?"Swap":"Replacement"}</td>
+        <td>{row.date}</td><td>{row.site}</td><td>{row.reason}</td><td className="wrap-cell">{row.note}</td>
+        <td><Status tone={row.status==="approved"?"success":row.status==="rejected"?"danger":"warning"}>{row.status}</Status></td>
+        <td>{row.status==="pending"?<span className="decision-buttons"><button className="secondary-button compact" onClick={()=>decide(row.id,"approved")}><Check/>Approve</button><button className="secondary-button compact" onClick={()=>decide(row.id,"rejected")}>Reject</button></span>:"—"}</td>
+      </tr>;})}
+    </tbody></table></div></Panel>
   </>;
 }
 
@@ -206,11 +252,24 @@ const defaultChecklist=[
   "Confirm guard register and SOP compliance",
 ];
 
+const foTaskLabels: Record<FoTask["kind"], string> = {
+  "sop-briefing": "SOP briefing at duty change",
+  "client-complaint": "Client complaint (CRM)",
+  "day-patrol": "Day patrolling",
+  "night-patrol": "Night patrolling",
+  "guard-change-review": "Guard change review",
+};
+
 export function InspectionsScreen({ onLog }: { onLog:()=>void }) {
   const notify=useToast();
   const [visit,setVisit]=useState<(typeof inspections)[number]|null>(null);
   const [checklist,setChecklist]=useState(defaultChecklist);
   const [editing,setEditing]=useState(false);
+  const [tasks,setTasks]=useState<FoTask[]>(foTasks.filter(task=>task.officer==="Ajmal Khan"));
+  const completeTask=(id:string)=>{
+    setTasks(current=>current.map(task=>task.id===id?{ ...task, status:"done" }:task));
+    notify("Task marked done");
+  };
 
   return <>
     <PageHeader title="FSO inspections" description="Planned visits, verification punches and follow-up actions." actions={<button className="primary-button" onClick={onLog}><NavigationArrow/>Log visit</button>}/>
@@ -239,6 +298,14 @@ export function InspectionsScreen({ onLog }: { onLog:()=>void }) {
         </>}
       </Panel>
     </div>
+    <Panel title="My tasks" description="SOP briefings, complaint verification and patrolling assigned to you.">
+      <div className="fo-task-list">{tasks.map(task=><div className={task.status==="done"?"fo-task-row done":"fo-task-row"} key={task.id}>
+        <span className="fo-task-kind">{foTaskLabels[task.kind]}</span>
+        <div><strong>{task.site}</strong><small>{task.detail}</small></div>
+        <span className="fo-task-due">{task.due}</span>
+        <button className="secondary-button compact" disabled={task.status==="done"} onClick={()=>completeTask(task.id)}>{task.status==="done"?<><Check/>Done</>:"Mark done"}</button>
+      </div>)}</div>
+    </Panel>
 
     {visit&&<DetailDrawer title={visit.site} subtitle={`${visit.officer} · ${visit.window}`} onClose={()=>setVisit(null)}
       footer={<>

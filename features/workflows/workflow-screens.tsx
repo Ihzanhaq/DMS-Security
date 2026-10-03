@@ -9,11 +9,14 @@ import {
 import { DefRows, DetailDrawer, PageHeader, Panel, PersonCell, StatStrip, Status, Timeline } from "@/components/shared/screen-elements";
 import { GeoMap } from "@/components/shared/geo-map";
 import { useToast } from "@/components/shared/toast-context";
-import { employees as employeeRecords, rupees, sites as siteRecords, skillOptions, statutorySettings } from "@/lib/mock-data";
+import { customFieldDefs, documentChecklist, employeeDocuments, employees as employeeRecords, rupees, siteDocuments, siteFeedback, sites as siteRecords, skillOptions, statutorySettings } from "@/lib/mock-data";
+import { useOps } from "@/components/shared/ops-context";
 import { usePayroll } from "@/components/shared/payroll-context";
-import type { BenefitOverride, BenefitScheme, PayBasis, Role } from "@/types/domain";
+import { keralaDistricts, keralaTaluks } from "@/lib/kerala-geo";
+import { canManageSalary } from "@/lib/roles";
+import type { BenefitOverride, BenefitScheme, EmployeeDocument, EmployeeDocumentStatus, EscalationContact, LatLng, PayBasis, Role, SiteDocument, SiteDocumentKind, SiteFeedback } from "@/types/domain";
 
-const districts = ["Thiruvananthapuram", "Kollam", "Alappuzha", "Kottayam", "Ernakulam"];
+const districts = keralaDistricts;
 const employees = ["Suresh Babu", "Fathima N", "Rajeev Kumar", "Anzar M", "Shamnad C M"];
 const sites = ["Lulu Mall, Kochi", "Aster Medcity", "TCS Technopark", "Lake Palace Resort"];
 const kitItems = ["Shirt", "Trousers", "Shoes", "Belt", "Cap", "Tie", "Socks", "Raincoat", "Whistle", "Lanyard", "ID holder", "Notebook"];
@@ -41,6 +44,21 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
   const [skills, setSkills] = useState<string[]>(["Day book", "General security"]);
   const availableSkills: string[] = [...skillOptions];
   const toggleSkill = (skill: string) => setSkills(current => current.includes(skill) ? current.filter(item => item !== skill) : [...current, skill]);
+  const [joiningDate, setJoiningDate] = useState(employeeId ? employee.joiningDate : "2026-09-22");
+  const [prefDistrict, setPrefDistrict] = useState(employee.workPreference?.district ?? employee.district);
+  const [prefTaluk, setPrefTaluk] = useState(employee.workPreference?.taluk ?? (keralaTaluks[employee.workPreference?.district ?? employee.district] ?? [])[0] ?? "");
+  const [docs, setDocs] = useState<EmployeeDocument[]>(() => {
+    const existing = employeeDocuments.filter(doc => doc.employeeId === targetEmployeeId);
+    const covered = new Set(existing.map(doc => doc.type));
+    return [
+      ...existing,
+      ...documentChecklist.filter(type => !covered.has(type)).map((type, index) => ({ id:`DOC-NEW-${index}`, employeeId:targetEmployeeId, type, status:"pending" as EmployeeDocumentStatus, dueBy:"2026-09-29" })),
+    ];
+  });
+  const [newDocType, setNewDocType] = useState("");
+  const [nominee, setNominee] = useState({ name: employee.nominee?.name ?? "", relation: employee.nominee?.relation ?? "Spouse", phone: employee.nominee?.phone ?? "", address: employee.nominee?.address ?? "", bankAccount: employee.nominee?.bankAccount ?? "", ifsc: employee.nominee?.ifsc ?? "", photoOnFile: employee.nominee?.photoOnFile ?? false });
+  const pfEsiOverdue = !employee.pfEsiDataReceived && (Date.parse("2026-09-22") - Date.parse(joiningDate)) / 86400000 >= 15;
+  const editDocRow = (index: number, patch: Partial<EmployeeDocument>) => setDocs(current => current.map((doc, row) => row === index ? { ...doc, ...patch } : doc));
 
   return <>
     <PageHeader title="Employee profile" description="Identity, capability, employment, statutory and recovery settings."
@@ -53,12 +71,51 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
           <label><span>Full name</span><input defaultValue={employeeId ? employee.name : ""} placeholder="Employee name" /></label>
           <label><span>Mobile number</span><input defaultValue={employeeId ? employee.phone : ""} /></label>
           <label><span>District</span><select defaultValue={employee.district}>{districts.map(item => <option key={item}>{item}</option>)}</select></label>
-          <label><span>Joining date</span><input type="date" defaultValue="2026-09-10" /></label>
+          <label><span>Joining date</span><input type="date" value={joiningDate} onChange={event => setJoiningDate(event.target.value)} /><small>PF/ESI data must reach HR within 15 days of joining.</small></label>
           <label><span>Employment status</span><select><option>Active</option><option>Reliever</option><option>On leave</option><option>Exit initiated</option></select></label>
+          <label><span>Preferred district</span><select value={prefDistrict} onChange={event => { setPrefDistrict(event.target.value); setPrefTaluk((keralaTaluks[event.target.value] ?? [])[0] ?? ""); }}>{keralaDistricts.map(item => <option key={item}>{item}</option>)}</select></label>
+          <label><span>Preferred taluk</span><select value={prefTaluk} onChange={event => setPrefTaluk(event.target.value)}>{(keralaTaluks[prefDistrict] ?? []).map(item => <option key={item}>{item}</option>)}</select></label>
+          <label><span>Shirt size</span><select defaultValue={employee.uniformSizes?.shirt ?? "L"}>{["S","M","L","XL","XXL"].map(size => <option key={size}>{size}</option>)}</select></label>
+          <label><span>Trouser size</span><select defaultValue={employee.uniformSizes?.trouser ?? "34"}>{["30","32","34","36","38"].map(size => <option key={size}>{size}</option>)}</select></label>
+          <label><span>Shoe size</span><select defaultValue={employee.uniformSizes?.shoe ?? "9"}>{["6","7","8","9","10","11"].map(size => <option key={size}>{size}</option>)}</select></label>
         </div>
+        {pfEsiOverdue && <div className="inline-alert warning"><WarningCircle/><span>PF/ESI enrolment data has not been received and 15 days have passed since joining ({joiningDate}). HR has been alerted.</span></div>}
       </Panel>
       <Panel title="Skills and eligibility" description="Operations can filter employees by these verified capabilities.">
         <div className="choice-grid">{availableSkills.map(skill => <button key={skill} className={skills.includes(skill) ? "choice-card selected" : "choice-card"} onClick={() => toggleSkill(skill)}><span>{skills.includes(skill) ? <CheckCircle weight="fill" /> : <Check />}</span><strong>{skill}</strong><small>{skill === "Driving" ? "Licence can be recorded in documents" : "Eligible for matching posts"}</small></button>)}</div>
+      </Panel>
+      <Panel title="Documents" description="Checklist items are configurable in Settings. Pending items past their due date raise alerts.">
+        <div className="editable-list">{docs.map((doc, index) => {
+          const overdue = doc.status === "pending" && doc.dueBy < "2026-09-22";
+          return <div className="editable-row employee-doc-row" key={doc.id}>
+            <span className="doc-type">{doc.type}{overdue && <em>Overdue</em>}</span>
+            <select value={doc.status} onChange={event => editDocRow(index, { status: event.target.value as EmployeeDocumentStatus, uploadedOn: event.target.value === "pending" ? undefined : doc.uploadedOn })} aria-label={`${doc.type} status`}>
+              <option value="pending">Pending</option><option value="uploaded">Uploaded</option><option value="verified">Verified</option>
+            </select>
+            <input type="date" value={doc.dueBy} onChange={event => editDocRow(index, { dueBy: event.target.value })} aria-label={`${doc.type} due date`}/>
+            <button className="secondary-button compact" disabled={doc.status !== "pending"} onClick={() => editDocRow(index, { status: "uploaded", uploadedOn: "2026-09-22" })}>{doc.status === "pending" ? "Mark uploaded" : doc.uploadedOn ? `On ${doc.uploadedOn}` : "Recorded"}</button>
+          </div>;
+        })}</div>
+        <div className="doc-add-row">
+          <input value={newDocType} onChange={event => setNewDocType(event.target.value)} placeholder="Add a document type (e.g. Driving licence)" aria-label="New document type"/>
+          <button className="secondary-button compact" onClick={() => { if (!newDocType.trim()) return; setDocs(current => [...current, { id:`DOC-NEW-${Date.now()}`, employeeId:targetEmployeeId, type:newDocType.trim(), status:"pending", dueBy:"2026-09-29" }]); setNewDocType(""); }}><Plus/>Add</button>
+        </div>
+      </Panel>
+      <Panel title="Nominee" description="Nominee identity, address and bank details for statutory records.">
+        <div className="form-grid">
+          <label><span>Nominee name</span><input value={nominee.name} onChange={event => setNominee(current => ({ ...current, name: event.target.value }))} placeholder="Full name"/></label>
+          <label><span>Relation</span><select value={nominee.relation} onChange={event => setNominee(current => ({ ...current, relation: event.target.value }))}>{["Spouse","Father","Mother","Son","Daughter","Other"].map(relation => <option key={relation}>{relation}</option>)}</select></label>
+          <label><span>Phone</span><input value={nominee.phone} onChange={event => setNominee(current => ({ ...current, phone: event.target.value }))}/></label>
+          <label><span>Bank account</span><input value={nominee.bankAccount} onChange={event => setNominee(current => ({ ...current, bankAccount: event.target.value }))}/></label>
+          <label><span>IFSC</span><input value={nominee.ifsc} onChange={event => setNominee(current => ({ ...current, ifsc: event.target.value }))}/></label>
+          <label><span>Address</span><textarea rows={2} value={nominee.address} onChange={event => setNominee(current => ({ ...current, address: event.target.value }))}/></label>
+        </div>
+        <label className="asset-check nominee-photo"><input type="checkbox" checked={nominee.photoOnFile} onChange={event => setNominee(current => ({ ...current, photoOnFile: event.target.checked }))}/><span><strong>Nominee photo collected</strong><small>Physical or scanned copy is on file with HR</small></span></label>
+      </Panel>
+      <Panel title="Additional fields" description="Defined by administrators in Settings → Custom fields.">
+        <div className="form-grid">
+          {customFieldDefs.map(def => <label key={def.key}><span>{def.label}</span><input type={def.kind === "number" ? "number" : def.kind === "date" ? "date" : "text"} defaultValue={employee.customFields?.[def.key] ?? ""}/></label>)}
+        </div>
       </Panel>
       <Panel title="Pay and statutory profile" description="Employee settings override organization, client and site defaults.">
         <div className="form-grid">
@@ -91,8 +148,8 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
   const siteRecord = siteRecords.find(item => item.name === selectedSite) ?? siteRecords[0];
   const { siteRules, postRules, updateSiteRule, updatePostRule } = usePayroll();
   const existingSiteRule = siteRules.filter(rule=>rule.site===selectedSite).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
-  const canManageSalary = role === "Owner" || role === "HR & Payroll";
-  const [tab, setTab] = useState(initialTab === "salary" && canManageSalary ? "Salary and benefits" : "Site profile");
+  const salaryManager = canManageSalary(role);
+  const [tab, setTab] = useState(initialTab === "salary" && salaryManager ? "Salary and benefits" : "Site profile");
   const [saved, setSaved] = useState(false);
   const [latitude, setLatitude] = useState(siteRecord.lat);
   const [longitude, setLongitude] = useState(siteRecord.lng);
@@ -111,12 +168,40 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
     setLatitude(Number(result.coords.latitude.toFixed(6)));
     setLongitude(Number(result.coords.longitude.toFixed(6)));
   });
+  const notify = useToast();
+  const [boundaryMode, setBoundaryMode] = useState<"circle" | "polygon">(siteRecord.polygon ? "polygon" : "circle");
+  const [polygon, setPolygon] = useState<LatLng[]>(siteRecord.polygon ?? []);
+  const [graceMins, setGraceMins] = useState(siteRecord.graceMins);
+  const [dayInterval, setDayInterval] = useState(siteRecord.dayCheckIntervalMins);
+  const [nightInterval, setNightInterval] = useState(siteRecord.nightCheckIntervalMins);
+  const [contacts, setContacts] = useState<EscalationContact[]>(siteRecord.escalationContacts);
+  const [officers, setOfficers] = useState<string[]>(siteRecord.fieldOfficers);
+  const [docs, setDocs] = useState<SiteDocument[]>(siteDocuments.filter(doc => doc.site === selectedSite));
+  const [docsDirty, setDocsDirty] = useState(false);
+  const [feedbackEntries, setFeedbackEntries] = useState<SiteFeedback[]>(siteFeedback.filter(item => item.site === selectedSite));
+  const [feedbackScore, setFeedbackScore] = useState(8);
+  const [feedbackNote, setFeedbackNote] = useState("");
+  const officerOptions = ["Ajmal Khan", "Praveen S", "Niyas P", "Meera K"];
+  const editDoc = (index: number, patch: Partial<SiteDocument>) => {
+    setDocs(current => current.map((doc, row) => row === index ? { ...doc, ...patch } : doc));
+    setDocsDirty(true);
+  };
 
   return <>
     <PageHeader title="Site and post configuration" description="Location, staffing, benefit inheritance and attendance controls."
-      actions={<><BackButton onBack={onBack}/><button className="primary-button" onClick={() => { if(canManageSalary){ updateSiteRule({ site:selectedSite, effectiveFrom:salaryEffectiveFrom, defaultDutyRate:siteRate||undefined, scheme }); posts.forEach(post=>updatePostRule(post.rate ? { site:selectedSite, post:post.name, effectiveFrom:salaryEffectiveFrom, dutyRate:Number(post.rate) } : null, selectedSite, post.name, salaryEffectiveFrom)); } setSaved(true); }}><FloppyDisk />Save configuration</button></>} />
+      actions={<><BackButton onBack={onBack}/><button className="primary-button" onClick={() => {
+        if(salaryManager){ updateSiteRule({ site:selectedSite, effectiveFrom:salaryEffectiveFrom, defaultDutyRate:siteRate||undefined, scheme }); posts.forEach(post=>updatePostRule(post.rate ? { site:selectedSite, post:post.name, effectiveFrom:salaryEffectiveFrom, dutyRate:Number(post.rate) } : null, selectedSite, post.name, salaryEffectiveFrom)); }
+        if (docsDirty) {
+          setDocs(current => current.map(doc => ({ ...doc, updatedOn: "2026-09-22", updatedBy: role })));
+          setDocsDirty(false);
+          notify(`${officers[0] ?? "Field officer"} alerted about the document update`);
+        } else {
+          notify(`Site policies saved · grace ${graceMins} min · checks ${dayInterval}/${nightInterval} min`);
+        }
+        setSaved(true);
+      }}><FloppyDisk />Save configuration</button></>} />
     {saved && <SavedNotice>Site configuration saved with its override sources.</SavedNotice>}
-    <div className="tabs-row workflow-tabs">{["Site profile", "Posts and shifts", "Geofence and attendance", ...(canManageSalary?["Salary and benefits"]:[])].map(item => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
+    <div className="tabs-row workflow-tabs">{["Site profile", "Posts and shifts", "Geofence and attendance", "Team and escalation", "Documents and SOP", ...(salaryManager?["Salary and benefits"]:[])].map(item => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
     {tab === "Site profile" && <Panel title="Client location" description="The client contract remains separate from operational posts."><div className="form-grid padded-form">
       <label><span>Client</span><select defaultValue={siteRecord.client}><option>{siteRecord.client}</option><option>Lulu Group</option><option>TCS</option><option>Aster DM Healthcare</option></select></label>
       <label><span>Site name</span><input defaultValue={selectedSite} /></label>
@@ -125,40 +210,100 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
       <label><span>Contract start</span><input type="date" defaultValue="2026-01-01" /></label>
       <label><span>Operations contact</span><input defaultValue="Site Manager · 98470 33445" /></label>
     </div></Panel>}
-    {tab === "Posts and shifts" && <Panel title="Configured posts" description={canManageSalary?"Duty quantity, staffing and optional salary override are editable per post.":"Duty quantity, required headcount and rotation are editable per post."} action={<button className="secondary-button compact" onClick={() => setPosts(current => [...current, { name: "New post", shift: "Day · 08:00–20:00", required: 1, duty: "1.00", rate:"" }])}><Plus />Add post</button>}>
-      <div className="editable-list">{posts.map((post, index) => <div className={canManageSalary?"editable-row salary-fields":"editable-row"} key={index}>
+    {tab === "Posts and shifts" && <Panel title="Configured posts" description={salaryManager?"Duty quantity, staffing and optional salary override are editable per post.":"Duty quantity, required headcount and rotation are editable per post."} action={<button className="secondary-button compact" onClick={() => setPosts(current => [...current, { name: "New post", shift: "Day · 08:00–20:00", required: 1, duty: "1.00", rate:"" }])}><Plus />Add post</button>}>
+      <div className="editable-list">{posts.map((post, index) => <div className={salaryManager?"editable-row salary-fields":"editable-row"} key={index}>
         <input value={post.name} onChange={event => setPosts(current => current.map((item, row) => row === index ? { ...item, name: event.target.value } : item))} aria-label={`Post ${index + 1} name`} />
         <select value={post.shift} onChange={event => setPosts(current => current.map((item, row) => row === index ? { ...item, shift: event.target.value } : item))}><option>Day · 08:00–20:00</option><option>Night · 20:00–08:00</option><option>24-hour rotation</option><option>Flexible</option></select>
         <input type="number" value={post.required} onChange={event => setPosts(current => current.map((item, row) => row === index ? { ...item, required: Number(event.target.value) } : item))} aria-label="Required headcount" />
         <select value={post.duty} onChange={event => setPosts(current => current.map((item, row) => row === index ? { ...item, duty: event.target.value } : item))}><option>0.25</option><option>0.50</option><option>0.75</option><option>1.00</option><option>1.50</option></select>
-        {canManageSalary&&<input type="number" min="0" value={post.rate} placeholder="Site rate" onChange={event=>setPosts(current=>current.map((item,row)=>row===index?{...item,rate:event.target.value===""?"":Number(event.target.value)}:item))} aria-label={`${post.name} duty rate override`}/>}
+        {salaryManager&&<input type="number" min="0" value={post.rate} placeholder="Site rate" onChange={event=>setPosts(current=>current.map((item,row)=>row===index?{...item,rate:event.target.value===""?"":Number(event.target.value)}:item))} aria-label={`${post.name} duty rate override`}/>}
         <button className="icon-button" onClick={() => setPosts(current => current.filter((_, row) => row !== index))} aria-label={`Remove ${post.name}`}><Trash /></button>
       </div>)}</div>
-      <div className={canManageSalary?"field-key salary-fields":"field-key"}><span>Post name</span><span>Shift pattern</span><span>Required</span><span>Duty unit</span>{canManageSalary&&<span>Rate override</span>}<span/></div>
+      <div className={salaryManager?"field-key salary-fields":"field-key"}><span>Post name</span><span>Shift pattern</span><span>Required</span><span>Duty unit</span>{salaryManager&&<span>Rate override</span>}<span/></div>
     </Panel>}
     {tab === "Geofence and attendance" && <div className="split-layout">
       <Panel className="geofence-editor">
-        <GeoMap center={{ lat: latitude, lng: longitude }} radius={radius} draggable
+        <div className="tabs-row boundary-mode-row">{(["circle","polygon"] as const).map(mode => <button key={mode} className={boundaryMode === mode ? "active" : ""} onClick={() => setBoundaryMode(mode)}>{mode === "circle" ? "Circle boundary" : "Polygon boundary"}</button>)}</div>
+        <GeoMap center={{ lat: latitude, lng: longitude }} radius={radius} draggable={boundaryMode === "circle"}
+          polygon={boundaryMode === "polygon" ? polygon : undefined}
+          onMapClick={boundaryMode === "polygon" ? point => setPolygon(current => [...current, point]) : undefined}
           onMove={next => { setLatitude(next.lat); setLongitude(next.lng); }} className="compact"/>
         <div className="map-caption">
           <span>Centre <b>{latitude.toFixed(5)}, {longitude.toFixed(5)}</b></span>
-          <span>Radius <b>{radius} m</b></span>
-          <span>Drag the pin or click the map to move the boundary</span>
+          {boundaryMode === "circle"
+            ? <><span>Radius <b>{radius} m</b></span><span>Drag the pin or click the map to move the boundary</span></>
+            : <><span>Vertices <b>{polygon.length}</b>{polygon.length < 3 && " · add at least 3"}</span><span>Click the map to add a boundary corner</span></>}
         </div>
       </Panel>
-      <Panel title="Boundary and device rules" description="Coordinates can be pasted, captured from the device, or set on the map.">
+      <Panel title="Boundary and attendance rules" description="Coordinates can be pasted, captured from the device, or set on the map.">
         <div className="form-stack">
           <label><span>Latitude</span><input type="number" step="0.000001" value={latitude} onChange={event => setLatitude(Number(event.target.value))}/></label>
           <label><span>Longitude</span><input type="number" step="0.000001" value={longitude} onChange={event => setLongitude(Number(event.target.value))}/></label>
-          <label><span>Geofence radius</span><div className="input-suffix"><input type="number" value={radius} onChange={event => setRadius(Number(event.target.value))}/><b>metres</b></div></label>
-          <label><span>Offline punch grace</span><div className="input-suffix"><input type="number" defaultValue="15"/><b>minutes</b></div></label>
+          {boundaryMode === "circle" && <label><span>Geofence radius</span><div className="input-suffix"><input type="number" value={radius} onChange={event => setRadius(Number(event.target.value))}/><b>metres</b></div></label>}
+          {boundaryMode === "polygon" && <div className="vertex-list">
+            {polygon.map((point, index) => <div key={`${point.lat}-${point.lng}-${index}`} className="vertex-row">
+              <span>#{index + 1}</span><b>{point.lat.toFixed(5)}, {point.lng.toFixed(5)}</b>
+              <button className="icon-button" onClick={() => setPolygon(current => current.filter((_, row) => row !== index))} aria-label={`Remove vertex ${index + 1}`}><Trash/></button>
+            </div>)}
+            {polygon.length === 0 && <p className="vertex-empty">No corners yet. Click the map to draw the boundary.</p>}
+            {polygon.length > 0 && <button className="secondary-button compact" onClick={() => setPolygon([])}>Clear boundary</button>}
+          </div>}
+          <label><span>Late-arrival grace</span><div className="input-suffix"><input type="number" min={15} max={60} value={graceMins} onChange={event => setGraceMins(Number(event.target.value))}/><b>minutes</b></div><small>15–60 minutes per site policy.</small></label>
+          <label><span>Day-shift check interval</span><div className="input-suffix"><input type="number" min={15} value={dayInterval} onChange={event => setDayInterval(Number(event.target.value))}/><b>minutes</b></div></label>
+          <label><span>Night-shift check interval</span><div className="input-suffix"><input type="number" min={15} value={nightInterval} onChange={event => setNightInterval(Number(event.target.value))}/><b>minutes</b></div><small>Drives the presence-check schedule for each shift.</small></label>
           <label><span>GPS accuracy threshold</span><div className="input-suffix"><input type="number" defaultValue="50"/><b>metres</b></div></label>
           <button className="secondary-button" onClick={locate}><Crosshair />Use current location</button>
         </div>
         <div className="toggle-list compact-toggles"><label><input type="checkbox"/><span><strong>Allow shared devices</strong><small>Every punch still requires employee identity</small></span></label><label><input type="checkbox" defaultChecked/><span><strong>Flag mock-location signals</strong><small>Route suspicious punches for HR review</small></span></label></div>
       </Panel>
     </div>}
-    {tab === "Salary and benefits" && canManageSalary && <div className="split-layout salary-config-layout">
+    {tab === "Team and escalation" && <div className="split-layout">
+      <Panel title="Field officers" description="Ordered assignment — FO 1 leads, FO 2 and 3 back up. Editable any time."
+        action={<button className="secondary-button compact" onClick={() => setOfficers(current => [...current, officerOptions.find(name => !current.includes(name)) ?? officerOptions[0]])}><Plus/>Add field officer</button>}>
+        <div className="editable-list">{officers.map((officer, index) => <div className="editable-row officer-row" key={`${officer}-${index}`}>
+          <span className="officer-slot">FO {index + 1}</span>
+          <select value={officer} onChange={event => setOfficers(current => current.map((item, row) => row === index ? event.target.value : item))} aria-label={`Field officer ${index + 1}`}>{officerOptions.map(name => <option key={name}>{name}</option>)}</select>
+          <button className="icon-button" onClick={() => setOfficers(current => current.filter((_, row) => row !== index))} aria-label={`Remove FO ${index + 1}`}><Trash/></button>
+        </div>)}</div>
+        {officers.length === 0 && <p className="vertex-empty">No field officer linked. Guard-change alerts have nowhere to go.</p>}
+      </Panel>
+      <Panel title="Escalation contacts" description="Shown to guards in the mobile app."
+        action={<button className="secondary-button compact" onClick={() => setContacts(current => [...current, { label: "New contact", name: "", phone: "" }])}><Plus/>Add contact</button>}>
+        <div className="editable-list">{contacts.map((contact, index) => <div className="editable-row contact-row" key={index}>
+          <input value={contact.label} onChange={event => setContacts(current => current.map((item, row) => row === index ? { ...item, label: event.target.value } : item))} aria-label={`Contact ${index + 1} label`}/>
+          <input value={contact.name} onChange={event => setContacts(current => current.map((item, row) => row === index ? { ...item, name: event.target.value } : item))} aria-label={`Contact ${index + 1} name`} placeholder="Name"/>
+          <input value={contact.phone} onChange={event => setContacts(current => current.map((item, row) => row === index ? { ...item, phone: event.target.value } : item))} aria-label={`Contact ${index + 1} phone`} placeholder="Phone"/>
+          <button className="icon-button" onClick={() => setContacts(current => current.filter((_, row) => row !== index))} aria-label={`Remove contact ${index + 1}`}><Trash/></button>
+        </div>)}</div>
+      </Panel>
+    </div>}
+    {tab === "Documents and SOP" && <div className="split-layout">
+      <Panel title="Site documents" description="Agreement, PCC and biodata requirements, SOP and check data. Edits alert the linked field officer on save."
+        action={<button className="secondary-button compact" onClick={() => { setDocs(current => [...current, { id:`SDOC-${Date.now()}`, site:selectedSite, kind:"sop", title:"New document", version:"1.0", updatedOn:"2026-09-22", updatedBy:role }]); setDocsDirty(true); }}><Plus/>Add document</button>}>
+        <div className="editable-list">{docs.map((doc, index) => <div className="editable-row doc-row" key={doc.id}>
+          <select value={doc.kind} onChange={event => editDoc(index, { kind: event.target.value as SiteDocumentKind })} aria-label={`Document ${index + 1} kind`}>
+            <option value="agreement">Client agreement</option><option value="pcc-requirement">PCC requirement</option><option value="biodata-requirement">Biodata requirement</option><option value="sop">SOP</option><option value="check-data">Check data</option>
+          </select>
+          <input value={doc.title} onChange={event => editDoc(index, { title: event.target.value })} aria-label={`Document ${index + 1} title`}/>
+          <input value={doc.version} onChange={event => editDoc(index, { version: event.target.value })} aria-label={`Document ${index + 1} version`} className="doc-version"/>
+          <span className="doc-updated">{doc.updatedOn}</span>
+          <button className="icon-button" onClick={() => { setDocs(current => current.filter((_, row) => row !== index)); setDocsDirty(true); }} aria-label={`Remove ${doc.title}`}><Trash/></button>
+        </div>)}</div>
+        {docs.length === 0 && <p className="vertex-empty">No documents recorded for this site yet.</p>}
+        {docsDirty && <div className="inline-alert"><WarningCircle/><span>Unsaved document changes — saving alerts {officers[0] ?? "the field officer"}.</span></div>}
+      </Panel>
+      <Panel title="Client feedback" description="Satisfaction records collected at site level.">
+        <div className="feedback-list">{feedbackEntries.map(entry => <div className="feedback-row" key={entry.id}>
+          <b>{entry.satisfaction}/10</b><div><strong>{entry.date}</strong><small>{entry.note}</small></div>
+        </div>)}</div>
+        <div className="form-stack feedback-form">
+          <label><span>Satisfaction (1–10)</span><select value={feedbackScore} onChange={event => setFeedbackScore(Number(event.target.value))}>{Array.from({ length: 10 }, (_, index) => index + 1).map(score => <option key={score} value={score}>{score}</option>)}</select></label>
+          <label><span>Note</span><textarea rows={2} value={feedbackNote} onChange={event => setFeedbackNote(event.target.value)} placeholder="What did the client say?"/></label>
+          <button className="secondary-button" onClick={() => { if (!feedbackNote.trim()) return; setFeedbackEntries(current => [{ id:`FB-${Date.now()}`, site:selectedSite, date:"2026-09-22", satisfaction:feedbackScore, note:feedbackNote.trim() }, ...current]); setFeedbackNote(""); notify("Client feedback recorded"); }}><Plus/>Record feedback</button>
+        </div>
+      </Panel>
+    </div>}
+    {tab === "Salary and benefits" && salaryManager && <div className="split-layout salary-config-layout">
       <Panel title="Site salary rule" description="Used by employees whose pay basis is Site-wise."><div className="form-stack">
         <label><span>Default rate per duty</span><div className="input-prefix"><b>₹</b><input type="number" min="0" value={siteRate} onChange={event=>setSiteRate(Number(event.target.value))}/></div><small>A post rate overrides this value for duties on that post.</small></label>
         <label><span>Effective from</span><input type="date" value={salaryEffectiveFrom} onChange={event=>setSalaryEffectiveFrom(event.target.value)}/><small>Earlier duties retain the rule effective on their duty date.</small></label>
@@ -244,6 +389,30 @@ export function NightVigilanceScreen({ onBack, guardMode = false }: { onBack: ()
 }
 
 export function ExitClearanceScreen({ onBack }: { onBack: () => void }) {
+  const notify = useToast();
+  const { addVacancy } = useOps();
+  const [exitEmployeeId, setExitEmployeeId] = useState(employeeRecords[0].id);
+  const [exitDate, setExitDate] = useState("2026-09-30");
+  const [exitTime, setExitTime] = useState("18:00");
+  const [exitReason, setExitReason] = useState("");
+  const [exitAdjustments, setExitAdjustments] = useState("");
+  const [exitPriority, setExitPriority] = useState<"high" | "normal">("normal");
+  const [exitRecorded, setExitRecorded] = useState(false);
+  const initiateExit = () => {
+    const employee = employeeRecords.find(item => item.id === exitEmployeeId) ?? employeeRecords[0];
+    addVacancy({
+      id: `VAC-${Date.now()}`,
+      site: employee.site === "Unassigned" ? "Reliever pool" : employee.site,
+      post: `${employee.role} · ${employee.shift}`,
+      district: employee.district,
+      priority: exitPriority,
+      openedOn: exitDate,
+      source: "exit",
+      status: "open",
+    });
+    setExitRecorded(true);
+    notify("Exit recorded · vacancy pushed to the recruitment list");
+  };
   const records = [
     { id: "BMG-2031", name: "Anzar M", site: "Lake Palace Resort", uniform: 800, advance: 0, penalty: 0 },
     { id: "BMG-1469", name: "Hareendrakumar K", site: "Travancore Medicity", uniform: 0, advance: 1500, penalty: 500 },
@@ -263,6 +432,18 @@ export function ExitClearanceScreen({ onBack }: { onBack: () => void }) {
 
   return <>
     <PageHeader title="Exit clearance" description="Resignation and withdrawal controls with immediate dues blocking." actions={<BackButton onBack={onBack}/>} />
+    <Panel title="Initiate exit" description="Date, time and adjustments are recorded with priority; the vacancy moves to recruitment automatically.">
+      <div className="form-grid padded-form">
+        <label><span>Employee</span><select value={exitEmployeeId} onChange={event => { setExitEmployeeId(event.target.value); setExitRecorded(false); }}>{employeeRecords.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label><span>Exit date</span><input type="date" value={exitDate} onChange={event => setExitDate(event.target.value)}/></label>
+        <label><span>Exit time</span><input type="time" value={exitTime} onChange={event => setExitTime(event.target.value)}/></label>
+        <label><span>Priority</span><select value={exitPriority} onChange={event => setExitPriority(event.target.value as "high" | "normal")}><option value="normal">Normal</option><option value="high">High — critical post</option></select></label>
+        <label><span>Reason</span><input value={exitReason} onChange={event => setExitReason(event.target.value)} placeholder="Resignation, relocation, termination…"/></label>
+        <label><span>Adjustments</span><input value={exitAdjustments} onChange={event => setExitAdjustments(event.target.value)} placeholder="Final salary, leave encashment, recoveries"/></label>
+      </div>
+      {exitRecorded && <SavedNotice>{`Exit recorded for ${exitDate} ${exitTime} · vacancy visible in Recruitment.`}</SavedNotice>}
+      <div className="form-footer exit-initiate-footer"><button className="primary-button" disabled={exitRecorded || !exitReason.trim()} onClick={initiateExit}><CheckCircle/>{exitRecorded ? "Exit recorded" : "Record exit and create vacancy"}</button></div>
+    </Panel>
     <div className="split-detail">
       <Panel title="Employees in clearance" description="Select an employee to review every recovery item."><div className="clearance-list">{records.map(item => <button className={selectedId === item.id ? "active" : ""} key={item.id} onClick={() => selectRecord(item.id)}><PersonCell name={item.name} id={item.id}/><span>{item.uniform + item.advance + item.penalty > 0 ? `₹${(item.uniform + item.advance + item.penalty).toLocaleString("en-IN")} due` : "No financial dues"}</span><Status tone={item.uniform + item.advance + item.penalty > 0 ? "danger" : "success"}>{item.uniform + item.advance + item.penalty > 0 ? "Blocked" : "Review"}</Status></button>)}</div></Panel>
       <Panel title={selected.name} description={`${selected.id} · ${selected.site}`} className="clearance-card">
@@ -323,13 +504,19 @@ export function ExitClearanceScreen({ onBack }: { onBack: () => void }) {
   </>;
 }
 
-export function PenaltiesScreen({ onBack }: { onBack: () => void }) {
+export function PenaltiesScreen({ onBack, role = "Owner" }: { onBack: () => void; role?: Role }) {
+  const notifyPenalty = useToast();
   const [employee, setEmployee] = useState("Fathima N");
   const [complaint, setComplaint] = useState("CL-1082 · Sleeping at assigned post");
   const [applied, setApplied] = useState(false);
   const duplicate = employee === "Rajeev Kumar";
+  const admin = canManageSalary(role);
+  const [exceptionEmployee, setExceptionEmployee] = useState("BMG-1840");
+  const [exceptionAmount, setExceptionAmount] = useState(500);
+  const [exceptionReason, setExceptionReason] = useState("");
+  const [exceptionSaved, setExceptionSaved] = useState(false);
   return <>
-    <PageHeader title="Performance penalties" description="A verified site-removal complaint may create one ₹500 deduction only once." actions={<BackButton onBack={onBack}/>} />
+    <PageHeader title="Penalties & exceptions" description="Complaint-linked penalties and admin-level office exception deductions." actions={<BackButton onBack={onBack}/>} />
     <div className="split-layout">
       <Panel title="Create penalty" description="The source complaint and withdrawal decision are mandatory."><div className="form-stack">
         <label><span>Employee</span><select value={employee} onChange={event => { setEmployee(event.target.value); setApplied(false); }}>{employees.map(item => <option key={item}>{item}</option>)}</select></label>
@@ -342,6 +529,27 @@ export function PenaltiesScreen({ onBack }: { onBack: () => void }) {
         <button className="primary-button" disabled={duplicate || applied} onClick={() => setApplied(true)}><Wallet/>{applied ? "Penalty recorded" : "Create ₹500 deduction"}</button>
       </div></Panel>
       <Panel title="Recent penalty ledger" description="Complaint-linked records prevent duplicate deductions."><div className="penalty-ledger"><div className="penalty-ledger-row"><PersonCell name="Rajeev Kumar" id="BMG-1988"/><Status tone="success">Applied once</Status><div className="penalty-ledger-meta"><span>CL-1082</span><strong>₹500</strong></div></div><div className="penalty-ledger-row"><PersonCell name="Anzar M" id="BMG-2031"/><Status tone="neutral">Recovered</Status><div className="penalty-ledger-meta"><span>CL-1068</span><strong>₹500</strong></div></div></div></Panel>
+    </div>
+    <div className="split-layout">
+      <Panel title="Office exception deduction" description="Admin-level manual deduction for special situations. Appears in payroll as an office-exception line.">
+        <div className="form-stack">
+          <label><span>Employee</span><select value={exceptionEmployee} onChange={event => { setExceptionEmployee(event.target.value); setExceptionSaved(false); }}>{employeeRecords.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+          <label><span>Deduction amount</span><div className="input-prefix"><b>₹</b><input type="number" min={1} value={exceptionAmount} onChange={event => setExceptionAmount(Number(event.target.value))}/></div></label>
+          <label><span>Reason</span><textarea rows={3} value={exceptionReason} onChange={event => setExceptionReason(event.target.value)} placeholder="Why this exception applies (kept in the audit history)"/></label>
+          <label><span>Effective payroll</span><input type="month" defaultValue="2026-09"/></label>
+          {!admin && <div className="inline-alert warning"><WarningCircle/><span>Only Owner, Branch Manager, Finance or HR can create an office exception deduction.</span></div>}
+          {exceptionSaved && <SavedNotice>Office exception deduction recorded · appears in payroll as &quot;office-exception&quot;.</SavedNotice>}
+          <button className="primary-button" disabled={!admin || exceptionSaved || !exceptionReason.trim()} onClick={() => { setExceptionSaved(true); notifyPenalty("Office exception deduction recorded"); }}><Wallet/>{exceptionSaved ? "Deduction recorded" : "Create exception deduction"}</button>
+        </div>
+      </Panel>
+      <Panel title="How exceptions differ" description="Penalties are complaint-linked; exceptions are discretionary.">
+        <div className="rule-summary">
+          <div><span>Source</span><strong>Office decision</strong></div>
+          <div><span>Amount</span><strong>Free, not fixed ₹500</strong></div>
+          <div><span>Approval</span><strong>Admin roles only</strong></div>
+          <p>Use for one-off recoveries that have no complaint behind them — damaged property, canteen dues, or a correction agreed with the employee. The reason is mandatory and retained.</p>
+        </div>
+      </Panel>
     </div>
   </>;
 }
@@ -393,7 +601,7 @@ export function DetailedWorkflowScreen({ kind, onBack, role = "Owner" }: { kind:
   const effectivePostRule=postRules.filter(item=>item.site===assignmentSite&&item.post===assignmentPost&&item.effectiveFrom<=assignmentDate).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
   const resolvedSource=effectiveEmployeeRule?.basis==="monthly"?"Monthly":effectiveEmployeeRule?.basis==="daily"?"Daily":effectivePostRule?"Post":effectiveSiteRule?.defaultDutyRate?"Site":"Missing";
   const resolvedRate=effectiveEmployeeRule?.basis==="monthly"?(effectiveEmployeeRule.monthlySalary??0)/effectiveEmployeeRule.payableDays:effectiveEmployeeRule?.basis==="daily"?(effectiveEmployeeRule.dailyRate??0):effectivePostRule?.dutyRate??effectiveSiteRule?.defaultDutyRate??0;
-  const canSeeSalary=role==="Owner"||role==="HR & Payroll";
+  const canSeeSalary=canManageSalary(role);
   const pfEnabled=effectiveEmployeeRule?.pfOverride==="enabled"||(effectiveEmployeeRule?.pfOverride==="inherit"&&effectiveSiteRule?.scheme==="pf-esi");
   const esiEnabled=effectiveEmployeeRule?.esiOverride==="enabled"||(effectiveEmployeeRule?.esiOverride==="inherit"&&(effectiveSiteRule?.scheme==="pf-esi"||effectiveSiteRule?.scheme==="esi"));
   const toggleKit = (item: string) => setKit(current => {

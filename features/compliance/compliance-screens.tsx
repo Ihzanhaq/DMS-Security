@@ -6,9 +6,12 @@ import {
   FileCsv, FileText, GearSix, Plus, UsersThree, WarningCircle,
 } from "@phosphor-icons/react";
 import {
-  attendanceRows, complaintTrail, complaints, deductionLog, employees,
-  lateAndAbsent, payrollRows, rupees, sites, sopDocuments, uniformPlans,
+  attendanceRows, complaintTrail, complaints, customFieldDefs as customFieldSeed, deductionLog, documentChecklist as documentChecklistSeed, employees,
+  exportTemplates, lateAndAbsent, payrollRows, rupees, sites, sopDocuments, uniformPlans,
 } from "@/lib/mock-data";
+import { applyTemplate, toCsv } from "@/lib/export-mapper";
+import { internalRoles, roleRegistry } from "@/lib/roles";
+import type { CustomFieldDef, ExportColumn, ExportTemplate } from "@/types/domain";
 import {
   DefRows, DetailDrawer, PageHeader, Panel, StatStrip, Status, Timeline, Toolbar,
 } from "@/components/shared/screen-elements";
@@ -208,12 +211,61 @@ function buildReport(report: string, filters: Filters): ReportSpec {
   }
 }
 
+const identityColumns=(columnsSpec:{label:string}[]):ExportColumn[]=>columnsSpec.map(column=>({ source:column.label, header:column.label, include:true }));
+
 export function ReportsScreen() {
   const notify=useToast();
   const [report,setReport]=useState(reportNames[0]);
   const [filters,setFilters]=useState<Filters>({ district:"All districts", client:"All clients", employee:"All employees" });
   const [ranAt,setRanAt]=useState<string|null>(null);
   const spec=useMemo(()=>buildReport(report,filters),[report,filters]);
+  const [templates,setTemplates]=useState<ExportTemplate[]>(()=>{
+    if(typeof window==="undefined") return exportTemplates;
+    try{
+      const stored=JSON.parse(window.localStorage.getItem("bmg-export-templates")??"[]") as ExportTemplate[];
+      return [...exportTemplates,...stored.filter(item=>!exportTemplates.some(seeded=>seeded.name===item.name))];
+    }catch{ return exportTemplates; }
+  });
+  const [templateName,setTemplateName]=useState("");
+  const [mapColumns,setMapColumns]=useState<ExportColumn[]>(identityColumns(spec.columns));
+  const selectReport=(next:string)=>{
+    setReport(next);
+    setRanAt(null);
+    setMapColumns(identityColumns(buildReport(next,filters).columns));
+  };
+  const moveColumn=(index:number,direction:-1|1)=>setMapColumns(current=>{
+    const next=[...current]; const target=index+direction;
+    if(target<0||target>=next.length) return current;
+    [next[index],next[target]]=[next[target],next[index]];
+    return next;
+  });
+  const saveTemplate=()=>{
+    if(!templateName.trim())return;
+    const template:ExportTemplate={ name:templateName.trim(), report, columns:mapColumns };
+    setTemplates(current=>{
+      const next=[...current.filter(item=>item.name!==template.name),template];
+      window.localStorage.setItem("bmg-export-templates",JSON.stringify(next.filter(item=>item.name!=="Default CSV")));
+      return next;
+    });
+    notify(`Template "${template.name}" saved`);
+  };
+  const loadTemplate=(name:string)=>{
+    const template=templates.find(item=>item.name===name);
+    if(!template)return;
+    setMapColumns(template.columns.length?template.columns:identityColumns(spec.columns));
+    notify(`Template "${name}" loaded`);
+  };
+  const exportCsv=()=>{
+    const mapped=applyTemplate(spec.columns,spec.rows as (string|number)[][],{ name:"live", report, columns:mapColumns });
+    const csv=toCsv(mapped.headers,mapped.rows);
+    const url=URL.createObjectURL(new Blob([csv],{ type:"text/csv" }));
+    const anchor=document.createElement("a");
+    anchor.href=url;
+    anchor.download=`${report.toLowerCase().replace(/[^a-z0-9]+/g,"-")}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    notify(`${report} exported · ${mapped.rows.length} rows · ${mapped.headers.length} columns`);
+  };
 
   const districts=useMemo(()=>["All districts",...Array.from(new Set(sites.map(site=>site.district)))],[]);
   const clients=useMemo(()=>["All clients",...Array.from(new Set(sites.map(site=>site.client)))],[]);
@@ -225,11 +277,11 @@ export function ReportsScreen() {
   const hasTotals=totals.some(value=>value!==null);
 
   return <>
-    <PageHeader title="Reports" description="Operational and payroll reports with consistent filters."
-      actions={<button className="primary-button" onClick={()=>notify(`${report} exported as CSV · ${spec.rows.length} rows`)}><DownloadSimple/>Export report</button>}/>
+    <PageHeader title="Reports" description="Operational and payroll reports with consistent filters and client export mapping."
+      actions={<button className="primary-button" onClick={exportCsv}><DownloadSimple/>Export report</button>}/>
     <div className="report-builder">
       <Panel title="Report library" description="Select a report to configure.">
-        <div className="report-list">{reportNames.map(item=><button key={item} className={report===item?"active":""} onClick={()=>{setReport(item);setRanAt(null)}}><FileCsv/><span>{item}</span></button>)}</div>
+        <div className="report-list">{reportNames.map(item=><button key={item} className={report===item?"active":""} onClick={()=>selectReport(item)}><FileCsv/><span>{item}</span></button>)}</div>
       </Panel>
       <Panel title={report} description={ranAt?`Generated at ${ranAt} · ${spec.rows.length} rows`:"Set the filters, then run the report."}>
         <div className="filter-form">
@@ -239,6 +291,23 @@ export function ReportsScreen() {
           <label><span>Client</span><select value={filters.client} onChange={event=>setFilters({...filters,client:event.target.value})}>{clients.map(item=><option key={item}>{item}</option>)}</select></label>
           <label><span>Employee</span><select value={filters.employee} onChange={event=>setFilters({...filters,employee:event.target.value})}>{names.map(item=><option key={item}>{item}</option>)}</select></label>
           <label><span>Grouping</span><select><option>No grouping</option><option>By site</option><option>By district</option><option>By employee</option></select></label>
+        </div>
+        <div className="export-mapping">
+          <div className="export-mapping-head">
+            <strong>Export mapping</strong>
+            <small>Map system fields to the client&apos;s Excel column names — update the template when the client&apos;s format arrives.</small>
+          </div>
+          <div className="export-template-row">
+            <select onChange={event=>{loadTemplate(event.target.value);event.target.value="";}} defaultValue="" aria-label="Load template"><option value="" disabled>Load template…</option>{templates.map(template=><option key={template.name}>{template.name}</option>)}</select>
+            <input value={templateName} onChange={event=>setTemplateName(event.target.value)} placeholder="Template name (e.g. Lulu payroll format)" aria-label="Template name"/>
+            <button className="secondary-button compact" onClick={saveTemplate}>Save template</button>
+          </div>
+          <div className="export-columns">{mapColumns.map((column,index)=><div className="export-column-row" key={column.source}>
+            <input type="checkbox" checked={column.include} onChange={event=>setMapColumns(current=>current.map((item,row)=>row===index?{ ...item, include:event.target.checked }:item))} aria-label={`Include ${column.source}`}/>
+            <span className="export-source">{column.source}</span>
+            <input value={column.header} onChange={event=>setMapColumns(current=>current.map((item,row)=>row===index?{ ...item, header:event.target.value }:item))} aria-label={`Client header for ${column.source}`}/>
+            <span className="reorder"><button onClick={()=>moveColumn(index,-1)} aria-label={`Move ${column.source} up`}>▲</button><button onClick={()=>moveColumn(index,1)} aria-label={`Move ${column.source} down`}>▼</button></span>
+          </div>)}</div>
         </div>
         <button className="secondary-button run-report" onClick={()=>setRanAt(new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}))}>Run preview</button>
         <div className="report-preview">
@@ -296,8 +365,12 @@ export function SettingsScreen() {
   const [unit,setUnit]=useState("0.25");
   const [saved,setSaved]=useState(false);
   const [dutyUnits,setDutyUnits]=useState(["0.25","0.50","0.75","1.00","1.50"]);
-  const groups=["Organization","Attendance","Payroll","PF and ESI","Duty units","Notifications","Roles and access"];
+  const groups=["Organization","Onboarding","Attendance","Payroll","PF and ESI","Duty units","Notifications","Roles and access"];
   const [group,setGroup]=useState("Attendance");
+  const [docTypes,setDocTypes]=useState<string[]>(documentChecklistSeed);
+  const [newDocType,setNewDocType]=useState("");
+  const [fieldDefs,setFieldDefs]=useState<CustomFieldDef[]>(customFieldSeed);
+  const [tiers,setTiers]=useState<Record<string,number>>(Object.fromEntries(internalRoles.map(name=>[name,roleRegistry[name].tier])));
   return <>
     <PageHeader title="Settings" description="Effective-dated defaults with client, site, post and employee overrides." actions={<button className="primary-button" onClick={()=>{setSaved(true);notify(`${group} settings saved`);setTimeout(()=>setSaved(false),1800)}}><CheckCircle/>{saved?"Saved":"Save changes"}</button>}/>
     <div className="settings-layout">
@@ -329,7 +402,34 @@ export function SettingsScreen() {
         </div>}
         {group==="Duty units"&&<div className="duty-unit-editor">{dutyUnits.map(value=><button key={value} onClick={()=>setDutyUnits(current=>current.filter(item=>item!==value))}><strong>{value}</strong><span>Remove</span></button>)}<button className="add-unit" onClick={()=>{const next=(Number(dutyUnits.at(-1)??1)+.25).toFixed(2);setDutyUnits(current=>[...current,next])}}><Plus/>Add next quarter unit</button></div>}
         {group==="Notifications"&&<div className="toggle-list settings-toggles"><label><input type="checkbox" defaultChecked/><span><strong>9:00 AM missing-login alert</strong><small>Send the absent report directly to HR.</small></span></label><label><input type="checkbox" defaultChecked/><span><strong>Immediate vacancy alert</strong><small>Notify district operations when leave or absence opens a post.</small></span></label><label><input type="checkbox" defaultChecked/><span><strong>Night vigilance escalation</strong><small>Escalate after the configured response window.</small></span></label><label><input type="checkbox" defaultChecked/><span><strong>Complaint SLA warning</strong><small>Notify the assigned owner before the deadline.</small></span></label></div>}
-        {group==="Roles and access"&&<div className="role-matrix"><div><strong>Owner</strong><span>All modules and configuration</span><Status tone="success">Full access</Status></div><div><strong>HR & Payroll</strong><span>Employees, attendance, payroll, recovery and reports</span><Status tone="info">Configured</Status></div><div><strong>District Operations</strong><span>Sites, deployment, attendance, FSO and complaints</span><Status tone="info">Configured</Status></div><div><strong>Guard / Client</strong><span>Own records and assigned operational actions only</span><Status tone="neutral">Restricted</Status></div></div>}
+        {group==="Onboarding"&&<div className="settings-form onboarding-settings">
+          <div className="settings-chip-editor">
+            <strong>Document checklist</strong>
+            <small>Required documents collected at onboarding. Add types as clients demand them.</small>
+            <div className="settings-chips">{docTypes.map(type=><button key={type} onClick={()=>setDocTypes(current=>current.filter(item=>item!==type))}>{type}<span>✕</span></button>)}</div>
+            <div className="settings-chip-add"><input value={newDocType} onChange={event=>setNewDocType(event.target.value)} placeholder="Add document type (e.g. Driving licence)" aria-label="New document type"/><button className="secondary-button compact" onClick={()=>{ if(!newDocType.trim())return; setDocTypes(current=>[...current,newDocType.trim()]); setNewDocType(""); }}>Add</button></div>
+          </div>
+          <div className="settings-chip-editor">
+            <strong>Custom profile fields</strong>
+            <small>Extra fields shown on every employee form. Future needs are added here, not in code.</small>
+            <div className="custom-field-rows">{fieldDefs.map((def,index)=><div key={def.key}>
+              <input value={def.label} onChange={event=>setFieldDefs(current=>current.map((item,row)=>row===index?{ ...item, label:event.target.value }:item))} aria-label={`Field ${index+1} label`}/>
+              <select value={def.kind} onChange={event=>setFieldDefs(current=>current.map((item,row)=>row===index?{ ...item, kind:event.target.value as CustomFieldDef["kind"] }:item))} aria-label={`Field ${index+1} kind`}><option value="text">Text</option><option value="date">Date</option><option value="number">Number</option></select>
+              <button className="secondary-button compact" onClick={()=>setFieldDefs(current=>current.filter((_,row)=>row!==index))}>Remove</button>
+            </div>)}</div>
+            <button className="secondary-button compact" onClick={()=>setFieldDefs(current=>[...current,{ key:`field-${Date.now()}`, label:"New field", kind:"text" }])}><Plus/>Add field</button>
+          </div>
+          <label><span>PF/ESI alert window</span><div className="input-suffix"><input type="number" defaultValue="15"/><b>days after joining</b></div><small>HR is alerted when enrolment data has not arrived inside this window.</small></label>
+        </div>}
+        {group==="Roles and access"&&<div className="role-tier-table">
+          <div className="role-tier-head"><span>Role</span><span>Default view</span><span>Tier</span></div>
+          {internalRoles.map(name=><div className="role-tier-row" key={name}>
+            <strong>{name}</strong>
+            <span>{roleRegistry[name].defaultView}</span>
+            <select value={tiers[name]} onChange={event=>{ setTiers(current=>({ ...current, [name]:Number(event.target.value) })); notify(`${name} moved to tier ${event.target.value}`); }} aria-label={`${name} tier`}>{[0,1,2,3,4].map(tier=><option key={tier} value={tier}>Tier {tier}</option>)}</select>
+          </div>)}
+          <div className="inline-alert" style={{ margin:"14px 19px" }}><Status tone="info">Provisional</Status><span>Hierarchy is provisional — update tiers when the client confirms the reporting structure. Guard and Client stay restricted to their own portals.</span></div>
+        </div>}
         <div className="inheritance-chain"><strong>Configuration inheritance</strong><div><span>Organization</span><b>›</b><span>Client</span><b>›</b><span>Site</span><b>›</b><span>Post</span><b>›</b><span>Employee</span></div><p>The most specific effective rule is used. Every override retains its source and start date.</p></div>
       </Panel>
     </div>

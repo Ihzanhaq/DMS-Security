@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import { X } from "@phosphor-icons/react";
+import { Phone, X } from "@phosphor-icons/react";
 import type { Icon } from "@phosphor-icons/react";
 
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) {
@@ -46,9 +46,9 @@ export function Status({ children, tone = "neutral" }: { children: ReactNode; to
   return <span className={`status-chip ${tone}`}>{children}</span>;
 }
 
-export function PersonCell({ name, id }: { name: string; id: string }) {
+export function PersonCell({ name, id, phone }: { name: string; id: string; phone?: string }) {
   const initials = name.split(" ").map(part => part[0]).join("").slice(0, 2);
-  return <span className="person-cell"><i>{initials}</i><span><strong>{name}</strong><small>{id}</small></span></span>;
+  return <span className="person-cell"><i>{initials}</i><span><strong>{name}</strong><small>{id}{phone && <> · <a className="tel-link" href={`tel:${phone.replace(/\s/g, "")}`} onClick={event => event.stopPropagation()} aria-label={`Call ${name}`}><Phone size={11} weight="fill" />{phone}</a></>}</small></span></span>;
 }
 
 export function ProgressBar({ value, tone = "blue" }: { value: number; tone?: string }) {

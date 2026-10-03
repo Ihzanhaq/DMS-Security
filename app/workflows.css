@@ -18,3 +18,28 @@
 @media(max-width:1050px){.workflow-grid,.workflow-detail-layout{grid-template-columns:1fr}.scheme-choice{grid-template-columns:1fr}}
 @media(max-width:760px){.form-grid,.choice-grid,.toggle-list,.settings-toggles{grid-template-columns:1fr}.editable-list{overflow-x:auto}.editable-row,.field-key{min-width:720px}.editable-row.salary-fields,.field-key.salary-fields{min-width:850px}.vigilance-row{grid-template-columns:minmax(160px,1fr) auto}.vigilance-row>span:nth-child(2),.vigilance-row>.status-chip{grid-column:2}.kit-checklist{grid-template-columns:repeat(2,1fr)}.duty-unit-editor{grid-template-columns:repeat(2,1fr)}.action-queue>div{grid-template-columns:34px 1fr auto}.action-queue>div>button{grid-column:2/4;justify-self:start}.salary-totals{grid-template-columns:repeat(2,1fr)}.salary-totals>div{border-bottom:1px solid var(--line)}.salary-totals .salary-net{grid-column:1/-1}.salary-sites{overflow-x:auto}.salary-sites details{min-width:620px}.statutory-cards{grid-template-columns:1fr}}
 @media(max-width:480px){.workflow-grid{grid-template-columns:1fr}.kit-checklist{grid-template-columns:1fr 1fr}.clearance-list>button,.role-matrix>div{grid-template-columns:1fr auto}.clearance-list>button>span:nth-child(2),.role-matrix>div>span{grid-column:1/-1}.dues-list>div{grid-template-columns:1fr auto}.dues-list button{grid-column:1/-1;justify-self:start}}
+
+/* Site configuration — boundary editor, team, documents, feedback */
+.boundary-mode-row{margin:0 0 10px}
+.vertex-list{display:grid;gap:6px}
+.vertex-row{display:grid;grid-template-columns:34px 1fr 39px;gap:9px;align-items:center;font-size:12px}
+.vertex-row b{font-family:var(--font-mono)}
+.vertex-empty{margin:0;padding:4px 0;font-size:12px;color:var(--muted)}
+.editable-row.officer-row{grid-template-columns:64px 1fr 39px}
+.officer-slot{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.editable-row.contact-row{grid-template-columns:minmax(120px,.8fr) 1fr minmax(130px,.9fr) 39px}
+.editable-row.doc-row{grid-template-columns:minmax(150px,.9fr) 1.4fr 70px 92px 39px}
+.doc-version{text-align:center}
+.doc-updated{font-size:11px;color:var(--muted);font-family:var(--font-mono)}
+.feedback-list{display:grid;padding:0 20px}
+.feedback-row{display:grid;grid-template-columns:56px 1fr;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+.feedback-row b{font-size:16px;color:var(--accent)}
+.feedback-row small{color:var(--muted)}
+.feedback-form{padding-top:14px}
+
+/* Employee onboarding — documents, nominee */
+.editable-row.employee-doc-row{grid-template-columns:minmax(150px,1fr) 120px 130px minmax(120px,auto)}
+.doc-type{font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px}
+.doc-type em{font-style:normal;font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--danger);background:var(--danger-tint);padding:2px 6px;border-radius:var(--r-sm)}
+.doc-add-row{display:grid;grid-template-columns:1fr auto;gap:9px;padding:12px 18px;border-top:1px solid var(--line)}
+.nominee-photo{margin:0 20px 18px}

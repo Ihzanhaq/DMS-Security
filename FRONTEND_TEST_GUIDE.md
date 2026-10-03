@@ -156,6 +156,86 @@ The selected role and screen are stored in the URL, so refresh and browser Back/
 - Add/remove fractional duty units.
 - Test: **Settings**, visit every group, change a value and click **Save changes**.
 
+### BMG scope expansion (September 2026)
+
+**Roles and hierarchy**
+
+- Eleven roles: Owner, Branch Manager, Operations In-charge, Finance, Finance Assistant, HR, HR Assistant, HR Executive, Field Officer, Guard, Client.
+- Permission sets and default screens come from a role registry; tiers are configurable in Settings → Roles and access (provisional until the client confirms the hierarchy).
+- Test: switch to **Finance** (payroll but no workforce), then **HR Executive** (HR quality landing, no payroll).
+
+**Onboarding additions**
+
+- Documents checklist (ID proof, PCC, …) with statuses, due dates and overdue flags; new document types can be added inline and in Settings → Onboarding.
+- Nominee identity, address, bank details and photo-collected flag.
+- Work-location preference: district and taluk dropdowns for all 14 Kerala districts.
+- Uniform sizes (shirt/trouser/shoe) captured on the form; joining date drives the PF/ESI 15-day warning.
+- Custom profile fields defined by admins render automatically.
+- Test: **Workforce → Add employee** — mark a document uploaded, change the preferred district and watch the taluk list follow.
+
+**Notifications**
+
+- The bell derives alerts from data per role: overdue documents and PF/ESI 15-day (HR), guard changes (Field Officer/Operations), spare-duty transfers (Operations/Finance), satisfaction calls due (HR).
+- Test: open the bell as **HR**, then as **Field Officer** — the lists differ.
+
+**Sites: polygon geofence, grace, team**
+
+- Boundary mode toggle: circle or polygon (click the map to add corners; vertex list with remove/clear).
+- Per-site late-arrival grace (15–60 min) and day/night presence-check intervals.
+- Team and escalation tab: ordered FO 1/2/3 assignment and escalation contacts shown in the guard app.
+- Documents and SOP tab: agreement, PCC/biodata requirements, SOP and check data; edits alert FO 1 on save. Client feedback panel records 1–10 satisfaction entries.
+- Test: **Sites & posts → Lulu Mall, Kochi** — the polygon renders; add a vertex, then edit a document title and save to see the FO alert toast.
+
+**Guard app additions**
+
+- Emergency contacts card with tap-to-call numbers; polygon-aware attendance punch; presence-check interval note.
+- Duty change screen: replacement (sick/accident), shift swap, or additional duty (OT) with hours.
+- Uniform screen: recorded sizes, item request with size and recovery plan, and a per-request status timeline (requested → approved → dispatched → delivered).
+- Help & queries: open tickets (salary doubts route here from the payslip drawer's "Ask about this payslip").
+- Sign out on the profile opens the shared-device user picker (tap another guard to continue).
+- Test as **Guard**: submit a duty change, request shoes size 9, raise a salary ticket, then sign out and pick Vinod Raj.
+
+**Duty changes and FO tasks (internal)**
+
+- Duty changes queue with approve/reject; approvals note reliever-pool opening for replacements.
+- Deployment shows recent guard changes (with FO notification) and an edit entry point.
+- Inspections gains a "My tasks" board: SOP briefings at duty change, client complaints (CRM), day/night patrolling.
+- Test: **Duty changes** — approve the sick replacement; **Deployment** — assign a reliever and watch the guard-change row appear.
+
+**Advance formula**
+
+- Eligibility everywhere is (gross earned − deductions to date) × 40%, computed from the live payroll breakdown.
+- Test: **Advances** — the table shows the deduction column; the guard advance screen blocks amounts above the cap.
+
+**Finance additions**
+
+- Office exception deduction: admin-only manual deduction with mandatory reason (Penalties & exceptions screen).
+- Spare payments screen: daily spare-guard transfers with queued/transferred states; transfers alert Operations In-charge and Finance.
+- Test: **Penalties & exceptions** as Finance (allowed) vs Field Officer (blocked); **Spare payments** — mark the queued row transferred.
+
+**Inventory**
+
+- Batch numbers and sizes per item in the inventory drawer; guard requests queue with status dropdown that updates the guard app and queues the salary debit on dispatch.
+- Test: **Uniforms** — open "View all 12 items and batches"; set UR-2 to dispatched.
+
+**HR quality, exits and recruitment**
+
+- 3-day satisfaction calls: auto tasks with due/overdue states, recorded with a 1–10 score and notes.
+- Ratings: 1–10 for employees and sites; averages appear in the workforce table and on site cards.
+- Initiate exit (date, time, reason, adjustments, priority) pushes a vacancy straight into the Recruitment list; high priority sorts first.
+- Test: **HR quality** — record the due call; **Exit clearances** — record a high-priority exit, then open **Recruitment** to see the new vacancy on top.
+
+**Tickets**
+
+- Open ticketing for salary, attendance, uniform, site issues and other; SLA, assignee, trail with replies, resolve action; manual logging drawer.
+- Test: **Tickets** — open TKT-1042, add a reply, resolve it.
+
+**Analytics and exports**
+
+- Analytics: monthly coverage/attendance lines and complaints bars, plus 1–10 heat maps for employees and sites (scores printed in every cell).
+- Reports gains an export-mapping section: rename/reorder/drop columns, save templates (kept in localStorage), and a real CSV download.
+- Test: **Analytics** — hover the charts and cells; **Reports** — rename "Net payable" to "NET PAY", export, and open the downloaded CSV.
+
 ## 4. Shared interaction checklist
 
 - Use all sidebar destinations in each role.

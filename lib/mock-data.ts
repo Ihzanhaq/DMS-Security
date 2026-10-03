@@ -441,18 +441,7 @@ export const formatCurrency = (amount: number) => new Intl.NumberFormat("en-IN",
 /** Compact rupee formatting for dense tables. */
 export const rupees = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
 
-/**
- * Great-circle distance in metres. Used to decide whether a punch falls
- * inside a site geofence.
- */
-export function distanceMetres(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const R = 6371000;
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return Math.round(2 * R * Math.asin(Math.sqrt(h)));
-}
+export { distanceMetres } from "@/lib/geofence";
 
 /**
  * 24-hour rotational pair split. A 30-day month divides 15/15; a 31-day

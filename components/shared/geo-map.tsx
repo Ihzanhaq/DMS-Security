@@ -6,6 +6,8 @@ import "leaflet/dist/leaflet.css";
 
 export type LatLng = { lat: number; lng: number };
 
+const BOUNDARY_STYLE = { color: "#1d5b4f", weight: 1.5, fillColor: "#1d5b4f", fillOpacity: .1 };
+
 /**
  * OpenStreetMap geofence view.
  *
@@ -13,18 +15,24 @@ export type LatLng = { lat: number; lng: number };
  * inside an effect rather than at module scope. Markers use `divIcon` so we
  * never depend on Leaflet's bundled image assets, which break under bundlers.
  */
-export function GeoMap({ center, radius, draggable = false, onMove, guard, guardInside = true, className = "" }: {
+export function GeoMap({ center, radius, draggable = false, onMove, guard, guardInside = true, polygon, onMapClick, className = "" }: {
   center: LatLng;
   radius: number;
   draggable?: boolean;
   onMove?: (position: LatLng) => void;
   guard?: LatLng | null;
   guardInside?: boolean;
+  /** ≥3 vertices renders a polygon boundary instead of the radius circle; 1–2 show as edit-in-progress dots. */
+  polygon?: LatLng[];
+  /** When set, map clicks call this instead of moving the centre pin. */
+  onMapClick?: (point: LatLng) => void;
   className?: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<Leaflet.Map | null>(null);
   const circleRef = useRef<Leaflet.Circle | null>(null);
+  const polygonRef = useRef<Leaflet.Polygon | null>(null);
+  const vertexRef = useRef<Leaflet.CircleMarker[]>([]);
   const siteRef = useRef<Leaflet.Marker | null>(null);
   const guardRef = useRef<Leaflet.Marker | null>(null);
   const libRef = useRef<typeof Leaflet | null>(null);
@@ -33,9 +41,11 @@ export function GeoMap({ center, radius, draggable = false, onMove, guard, guard
   // sync effects below re-run against a live map instead of bailing out.
   const [ready, setReady] = useState(false);
 
-  // Keep the latest callback without forcing the map to re-initialise.
+  // Keep the latest callbacks without forcing the map to re-initialise.
   const onMoveRef = useRef(onMove);
   useEffect(() => { onMoveRef.current = onMove; }, [onMove]);
+  const onMapClickRef = useRef(onMapClick);
+  useEffect(() => { onMapClickRef.current = onMapClick; }, [onMapClick]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,11 +67,8 @@ export function GeoMap({ center, radius, draggable = false, onMove, guard, guard
 
       circleRef.current = L.circle([center.lat, center.lng], {
         radius,
-        color: "#1d5b4f",
-        weight: 1.5,
+        ...BOUNDARY_STYLE,
         dashArray: "5 4",
-        fillColor: "#1d5b4f",
-        fillOpacity: .1,
       }).addTo(map);
 
       siteRef.current = L.marker([center.lat, center.lng], {
@@ -78,11 +85,12 @@ export function GeoMap({ center, radius, draggable = false, onMove, guard, guard
           const { lat, lng } = (event.target as Leaflet.Marker).getLatLng();
           onMoveRef.current?.({ lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) });
         });
-        map.on("click", event => {
-          const { lat, lng } = event.latlng;
-          onMoveRef.current?.({ lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) });
-        });
       }
+      map.on("click", event => {
+        const point = { lat: Number(event.latlng.lat.toFixed(6)), lng: Number(event.latlng.lng.toFixed(6)) };
+        if (onMapClickRef.current) { onMapClickRef.current(point); return; }
+        if (draggable) onMoveRef.current?.(point);
+      });
 
       mapRef.current = map;
       setReady(true);
@@ -97,6 +105,8 @@ export function GeoMap({ center, radius, draggable = false, onMove, guard, guard
       mapRef.current?.remove();
       mapRef.current = null;
       circleRef.current = null;
+      polygonRef.current = null;
+      vertexRef.current = [];
       siteRef.current = null;
       guardRef.current = null;
       setReady(false);
@@ -114,6 +124,30 @@ export function GeoMap({ center, radius, draggable = false, onMove, guard, guard
     siteRef.current?.setLatLng([center.lat, center.lng]);
     map.setView([center.lat, center.lng], map.getZoom(), { animate: false });
   }, [ready, center.lat, center.lng, radius]);
+
+  // Draw the polygon boundary. A committed polygon (≥3 points) replaces the
+  // circle; 1–2 points render as dots so the editor shows progress.
+  useEffect(() => {
+    const map = mapRef.current;
+    const L = libRef.current;
+    if (!ready || !map || !L) return;
+
+    polygonRef.current?.remove();
+    polygonRef.current = null;
+    vertexRef.current.forEach(marker => marker.remove());
+    vertexRef.current = [];
+
+    const points = polygon ?? [];
+    const committed = points.length >= 3;
+    circleRef.current?.setStyle(committed ? { opacity: 0, fillOpacity: 0 } : { opacity: 1, fillOpacity: BOUNDARY_STYLE.fillOpacity });
+
+    if (committed) {
+      polygonRef.current = L.polygon(points.map(point => [point.lat, point.lng] as [number, number]), BOUNDARY_STYLE).addTo(map);
+    } else {
+      vertexRef.current = points.map(point =>
+        L.circleMarker([point.lat, point.lng], { radius: 5, ...BOUNDARY_STYLE, fillOpacity: .9 }).addTo(map));
+    }
+  }, [ready, polygon]);
 
   // Plot the guard's live position.
   useEffect(() => {

@@ -5,7 +5,9 @@ import {
   ArrowRight, CalendarCheck, CheckCircle, Coins, DownloadSimple, Package, Plus, Receipt,
   ShieldCheck, TShirt, UploadSimple, Wallet, WarningCircle,
 } from "@phosphor-icons/react";
-import { employees, lateAndAbsent, rupees, uniformKit, uniformPlans } from "@/lib/mock-data";
+import { employees, lateAndAbsent, rupees, spareDutyPayments, uniformBatches, uniformKit, uniformPlans, uniformRequests } from "@/lib/mock-data";
+import type { SpareDutyPayment, UniformRequest, UniformRequestStatus } from "@/types/domain";
+import { computeAdvanceEligibility } from "@/lib/advance-calculator";
 import { payBasisLabel } from "@/lib/payroll-calculator";
 import {
   DefRows, DetailDrawer, PageHeader, Panel, PersonCell, ProgressBar,
@@ -321,33 +323,43 @@ export function PayrollScreen({ onAllocation }: { onAllocation: (employeeId: str
   </>;
 }
 
-type AdvanceRow = { name:string; id:string; earned:number; eligible:number; requested:number; state:string };
+type AdvanceRow = { name:string; id:string; earned:number; deductions:number; eligible:number; requested:number; state:string };
 
 export function AdvancesScreen({ onCreate }: { onCreate:()=>void }) {
   const notify=useToast();
+  const { getBreakdown } = usePayroll();
   const [reviewing,setReviewing]=useState<AdvanceRow|null>(null);
-  const [rows,setRows]=useState<AdvanceRow[]>([
-    {name:"Fathima N",id:"BMG-2274",earned:8615,eligible:3446,requested:3000,state:"Pending"},
-    {name:"Rajeev Kumar",id:"BMG-1988",earned:9850,eligible:3940,requested:3500,state:"Approved"},
-    {name:"Anzar M",id:"BMG-2031",earned:6250,eligible:2500,requested:3000,state:"Over limit"},
-  ]);
+  const [decisions,setDecisions]=useState<Record<string,string>>({});
+  const seeds=[
+    { id:"BMG-2274", requested:3000, state:"Pending" },
+    { id:"BMG-1988", requested:3500, state:"Approved" },
+    { id:"BMG-2031", requested:3000, state:"Pending" },
+  ];
+  const rows:AdvanceRow[]=seeds.map(seed=>{
+    const employee=employees.find(item=>item.id===seed.id);
+    const breakdown=getBreakdown(seed.id);
+    const deductions=breakdown.pf+breakdown.esi+breakdown.otherDeductions;
+    const eligibility=computeAdvanceEligibility({ grossEarned:breakdown.gross, deductionsToDate:deductions, alreadyRequested:0 });
+    const state=decisions[seed.id] ?? (seed.requested>eligibility.maxAdvance?"Over limit":seed.state);
+    return { name:employee?.name??seed.id, id:seed.id, earned:breakdown.gross, deductions, eligible:eligibility.maxAdvance, requested:seed.requested, state };
+  });
 
   function decide(row:AdvanceRow, state:string) {
-    setRows(current=>current.map(item=>item.id===row.id?{ ...item, state }:item));
+    setDecisions(current=>({ ...current, [row.id]:state }));
     setReviewing(null);
     notify(`${row.name} advance ${state.toLowerCase()}`);
   }
 
   return <>
-    <PageHeader title="Salary advances" description="Eligibility is 40% of approved gross wages earned to date." actions={<button className="primary-button" onClick={onCreate}><Plus/>New request</button>}/>
+    <PageHeader title="Salary advances" description="Eligibility is 40% of gross earned minus deductions to date." actions={<button className="primary-button" onClick={onCreate}><Plus/>New request</button>}/>
     <StatStrip items={[
       {icon:Wallet,value:"₹2.84L",label:"Outstanding",note:"Across 74 employees"},
       {icon:Coins,value:"11",label:"Awaiting approval",note:"₹38,500 requested",tone:"orange"},
       {icon:CheckCircle,value:"32",label:"Approved this month",note:"₹1.16L total",tone:"green"},
       {icon:WarningCircle,value:"2",label:"Above eligibility",note:"Needs correction",tone:"red"},
     ]}/>
-    <Panel className="table-panel"><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Employee</th><th>Gross earned</th><th>40% eligible</th><th>Requested</th><th>Utilization</th><th>Status</th><th>Action</th></tr></thead><tbody>
-      {rows.map(row=><tr key={row.id}><td><PersonCell name={row.name} id={row.id}/></td><td>{rupees(row.earned)}</td><td>{rupees(row.eligible)}</td><td>{rupees(row.requested)}</td><td><ProgressBar value={row.requested/row.eligible*100} tone={row.requested>row.eligible?"red":"blue"}/></td><td><Status tone={row.state==="Approved"?"success":row.state==="Pending"?"warning":"danger"}>{row.state}</Status></td><td><button className="text-button" onClick={()=>setReviewing(row)}>Review</button></td></tr>)}
+    <Panel className="table-panel"><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Employee</th><th>Gross earned</th><th>Deductions</th><th>40% eligible</th><th>Requested</th><th>Utilization</th><th>Status</th><th>Action</th></tr></thead><tbody>
+      {rows.map(row=><tr key={row.id}><td><PersonCell name={row.name} id={row.id}/></td><td>{rupees(row.earned)}</td><td>− {rupees(row.deductions)}</td><td>{rupees(row.eligible)}</td><td>{rupees(row.requested)}</td><td><ProgressBar value={row.eligible>0?row.requested/row.eligible*100:100} tone={row.requested>row.eligible?"red":"blue"}/></td><td><Status tone={row.state==="Approved"?"success":row.state==="Pending"?"warning":"danger"}>{row.state}</Status></td><td><button className="text-button" onClick={()=>setReviewing(row)}>Review</button></td></tr>)}
     </tbody></table></div></Panel>
 
     {reviewing&&<AdvanceDrawer row={reviewing} onDecide={decide} onClose={()=>setReviewing(null)}/>}
@@ -367,11 +379,12 @@ function AdvanceDrawer({ row, onDecide, onClose }: { row:AdvanceRow; onDecide:(r
       <h3>Eligibility</h3>
       <DefRows rows={[
         { label:"Gross wages earned", value:rupees(row.earned), mono:true },
+        { label:"Deductions to date", value:`− ${rupees(row.deductions)}`, mono:true },
         { label:"Eligibility cap (40%)", value:rupees(row.eligible), mono:true },
         { label:"Requested", value:rupees(row.requested), mono:true },
         { label:"Headroom", value:rupees(Math.max(0,row.eligible-row.requested)), mono:true, total:true },
       ]}/>
-      <ProgressBar value={row.requested/row.eligible*100} tone={overLimit?"red":"blue"}/>
+      <ProgressBar value={row.eligible>0?row.requested/row.eligible*100:100} tone={overLimit?"red":"blue"}/>
     </div>
     <div className="drawer-section">
       <h3>Proposed recovery</h3>
@@ -385,30 +398,75 @@ function AdvanceDrawer({ row, onDecide, onClose }: { row:AdvanceRow; onDecide:(r
       <h3>Request history</h3>
       <Timeline entries={[
         { title:"Submitted from mobile app", time:"09 Sep · 14:22", state:"done" },
-        { title:"Eligibility auto-checked", time:"09 Sep · 14:22", note:overLimit?"Flagged: request above the 40% cap.":"Within the 40% cap.", state:"done" },
+        { title:"Eligibility auto-checked", time:"09 Sep · 14:22", note:overLimit?"Flagged: request above (earned − deductions) × 40%.":"Within (earned − deductions) × 40%.", state:"done" },
         { title:"Awaiting HR decision", time:"Pending", state:"active" },
       ]}/>
     </div>
   </DetailDrawer>;
 }
 
+export function SparePaymentsScreen() {
+  const notify=useToast();
+  const [rows,setRows]=useState<SpareDutyPayment[]>(spareDutyPayments);
+  const transfer=(id:string)=>{
+    const row=rows.find(item=>item.id===id);
+    setRows(current=>current.map(item=>item.id===id?{ ...item, status:"transferred" }:item));
+    notify(`${rupees(row?.amount??0)} transferred · Operations In-charge and Finance alerted`);
+  };
+  const employeeOf=(id:string)=>employees.find(item=>item.id===id);
+  const queued=rows.filter(item=>item.status==="queued");
+  return <>
+    <PageHeader title="Spare duty payments" description="Daily transfers to spare guards. Every transfer alerts Operations In-charge and Finance."/>
+    <StatStrip items={[
+      {icon:Coins,value:String(queued.length),label:"Queued today",note:"Awaiting transfer",tone:queued.length?"orange":"green"},
+      {icon:Wallet,value:rupees(rows.filter(item=>item.status==="transferred").reduce((sum,item)=>sum+item.amount,0)),label:"Transferred",note:"This week",tone:"green"},
+      {icon:CheckCircle,value:String(rows.length),label:"Spare duties",note:"Recorded this week"},
+      {icon:ShieldCheck,value:"Ops + Fin",label:"Alert recipients",note:"Notified on every transfer",tone:"violet"},
+    ]}/>
+    <Panel className="table-panel"><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Employee</th><th>Date</th><th>Site</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead><tbody>
+      {rows.map(row=>{const employee=employeeOf(row.employeeId);return <tr key={row.id}>
+        <td><PersonCell name={employee?.name??row.employeeId} id={row.employeeId} phone={employee?.phone}/></td>
+        <td>{row.date}</td><td>{row.site}</td><td><strong>{rupees(row.amount)}</strong></td>
+        <td><Status tone={row.status==="transferred"?"success":"warning"}>{row.status}</Status></td>
+        <td>{row.status==="queued"?<button className="secondary-button compact" onClick={()=>transfer(row.id)}>Mark transferred</button>:"—"}</td>
+      </tr>;})}
+    </tbody></table></div></Panel>
+  </>;
+}
+
 export function UniformsScreen({ onIssue, onImport }: { onIssue:()=>void; onImport:()=>void }) {
   const notify=useToast();
   const [plan,setPlan]=useState<(typeof uniformPlans)[number]|null>(null);
   const [inventoryOpen,setInventoryOpen]=useState(false);
+  const [requests,setRequests]=useState<UniformRequest[]>(uniformRequests);
+  const updateStatus=(id:string,status:UniformRequestStatus)=>{
+    const request=requests.find(item=>item.id===id);
+    setRequests(current=>current.map(item=>item.id===id?{ ...item, status }:item));
+    notify(`${id} marked ${status} · guard app updated${status==="dispatched"?` · ${rupees(request?.amount??0)} queued for salary debit`:""}`);
+  };
 
   return <>
-    <PageHeader title="Uniform & inventory" description="Twelve-item kit stock, issuance and salary recovery." actions={<><button className="secondary-button" onClick={onImport}><UploadSimple/>Import balances</button><button className="primary-button" onClick={onIssue}><Plus/>Issue kit</button></>}/>
+    <PageHeader title="Uniform & inventory" description="Batch-level kit stock, guard requests, dispatch and salary recovery." actions={<><button className="secondary-button" onClick={onImport}><UploadSimple/>Import balances</button><button className="primary-button" onClick={onIssue}><Plus/>Issue kit</button></>}/>
     <StatStrip items={[
       {icon:TShirt,value:"76",label:"Kits issued",note:"This quarter"},
-      {icon:Package,value:"148",label:"Complete kits",note:"Ready in stock",tone:"green"},
+      {icon:Package,value:String(new Set(uniformBatches.map(batch=>batch.batchNo)).size),label:"Batches tracked",note:"Size-level stock",tone:"green"},
       {icon:Wallet,value:"₹1.82L",label:"Pending recovery",note:"93 employees",tone:"orange"},
-      {icon:WarningCircle,value:"3",label:"Exit blocks",note:"Uniform dues pending",tone:"red"},
+      {icon:WarningCircle,value:String(requests.filter(item=>item.status==="requested").length),label:"Open requests",note:"From the guard app",tone:"red"},
     ]}/>
     <div className="content-grid">
       <Panel title="Recovery plans" description="Defaults can be overridden per employee."><div className="plan-list">{uniformPlans.map(item=><button key={item.name} onClick={()=>setPlan(item)}><span className="small-icon blue"><TShirt/></span><div><strong>{item.name}</strong><small>{rupees(item.upfront)} paid · {rupees(item.deduction)} recovered</small></div><b>{item.people}</b><ArrowRight/></button>)}</div></Panel>
-      <Panel title="Kit availability" description="Central store · Thiruvananthapuram"><div className="stock-list">{uniformKit.slice(0,6).map(item=><div key={item.item}><span>{item.item.split(" (")[0]}</span><ProgressBar value={Math.min(100,item.stock/2.6)} tone={item.stock<item.reorder?"orange":"blue"}/><strong>{item.stock}</strong></div>)}</div><button className="full-button" onClick={()=>setInventoryOpen(true)}>View all 12 items</button></Panel>
+      <Panel title="Kit availability" description="Central store · Thiruvananthapuram"><div className="stock-list">{uniformKit.slice(0,6).map(item=><div key={item.item}><span>{item.item.split(" (")[0]}</span><ProgressBar value={Math.min(100,item.stock/2.6)} tone={item.stock<item.reorder?"orange":"blue"}/><strong>{item.stock}</strong></div>)}</div><button className="full-button" onClick={()=>setInventoryOpen(true)}>View all 12 items and batches</button></Panel>
     </div>
+    <Panel title="Requests from guards" description="Raised in the mobile app · every status change shows in the guard's app.">
+      <div className="uniform-request-list">{requests.map(request=>{const employee=employees.find(item=>item.id===request.employeeId);return <div className="uniform-request-row" key={request.id}>
+        <PersonCell name={employee?.name??request.employeeId} id={request.employeeId} phone={employee?.phone}/>
+        <span className="request-items">{request.items.map(item=>`${item.item.split(" (")[0]} · ${item.size} ×${item.qty}`).join(", ")}</span>
+        <span className="request-meta">{request.requestedOn} · {rupees(request.amount)} · {request.recoveryPlan}</span>
+        <select value={request.status} onChange={event=>updateStatus(request.id,event.target.value as UniformRequestStatus)} aria-label={`${request.id} status`}>
+          <option value="requested">Requested</option><option value="approved">Approved</option><option value="dispatched">Dispatched</option><option value="delivered">Delivered</option>
+        </select>
+      </div>;})}</div>
+    </Panel>
 
     {plan&&<DetailDrawer title={plan.name} subtitle="Uniform recovery plan" onClose={()=>setPlan(null)}
       footer={<>
@@ -443,11 +501,12 @@ export function UniformsScreen({ onIssue, onImport }: { onIssue:()=>void; onImpo
         <button className="primary-button" onClick={()=>{notify("Stock report exported as CSV");setInventoryOpen(false)}}><DownloadSimple/>Export stock</button>
       </>}>
       <div className="kit-grid">
-        {uniformKit.map(item=><div key={item.item}>
+        {uniformKit.map(item=>{const batches=uniformBatches.filter(batch=>batch.item===item.item);return <div key={item.item}>
           <strong>{item.item}</strong>
           <div className="kit-meta"><span>{item.issued} per kit</span><span className={item.stock<item.reorder?"low":undefined}>{item.stock} in stock</span></div>
           <ProgressBar value={Math.min(100,item.stock/2.8)} tone={item.stock<item.reorder?"orange":"blue"}/>
-        </div>)}
+          {batches.length>0&&<div className="batch-lines">{batches.map(batch=><span key={`${batch.batchNo}-${batch.size}`}><b>{batch.batchNo}</b> · size {batch.size} · {batch.qty} pcs · {batch.receivedOn}</span>)}</div>}
+        </div>;})}
       </div>
       <div className="drawer-section">
         <div className="inline-alert warning"><WarningCircle/><span>Raincoat and torch stock are below the reorder level. {uniformKit.filter(item=>item.stock<item.reorder).length} of 12 items need replenishment.</span></div>
