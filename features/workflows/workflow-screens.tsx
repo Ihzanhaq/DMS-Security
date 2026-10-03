@@ -11,6 +11,7 @@ import { GeoMap } from "@/components/shared/geo-map";
 import { useToast } from "@/components/shared/toast-context";
 import { useOnboarding, withChecklist } from "@/components/shared/onboarding-context";
 import { FileSlot } from "@/components/shared/file-upload";
+import { AddItemRow } from "@/components/shared/add-item-row";
 import { employees as employeeRecords, rupees, siteDocuments, siteFeedback, sites as siteRecords, skillOptions, statutorySettings } from "@/lib/mock-data";
 import { useOps } from "@/components/shared/ops-context";
 import { usePayroll } from "@/components/shared/payroll-context";
@@ -57,7 +58,6 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
   const [sizes, setSizes] = useState(savedProfile.uniformSizes);
   const [customValues, setCustomValues] = useState(savedProfile.customFields);
   const [docs, setDocs] = useState<EmployeeDocument[]>(() => withChecklist(targetEmployeeId, savedProfile.documents, config.documentChecklist));
-  const [newDocType, setNewDocType] = useState("");
   const [nominee, setNominee] = useState(savedProfile.nominee);
   const pfEsiOverdue = !pfEsiReceived && (Date.parse("2026-09-22") - Date.parse(joiningDate)) / 86400000 >= config.pfEsiWindowDays;
   const saveEmployee = () => {
@@ -111,10 +111,9 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
                 : { file: undefined, status: "pending", uploadedOn: undefined })} />
           </div>;
         })}</div>
-        <div className="doc-add-row">
-          <input value={newDocType} onChange={event => setNewDocType(event.target.value)} placeholder="Add a document type (e.g. Driving licence)" aria-label="New document type"/>
-          <button className="secondary-button compact" onClick={() => { if (!newDocType.trim()) return; setDocs(current => [...current, { id:`DOC-NEW-${Date.now()}`, employeeId:targetEmployeeId, type:newDocType.trim(), status:"pending", dueBy:"2026-09-29" }]); setNewDocType(""); }}><Plus/>Add</button>
-        </div>
+        <AddItemRow label="Add another document for this employee" placeholder="Document name, e.g. Driving licence" buttonLabel="Add document"
+          existing={docs.map(doc => doc.type)} disabled={!canEditProfile}
+          onAdd={type => setDocs(current => [...current, { id:`DOC-NEW-${Date.now()}`, employeeId:targetEmployeeId, type, status:"pending", dueBy:"2026-09-29" }])} />
       </Panel>
       <Panel title="Nominee" description="Nominee identity, address and bank details for statutory records.">
         <div className="form-grid">

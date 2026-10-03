@@ -11,6 +11,7 @@ import {
 } from "@/lib/mock-data";
 import { applyTemplate, toCsv } from "@/lib/export-mapper";
 import { useOnboarding } from "@/components/shared/onboarding-context";
+import { AddItemRow } from "@/components/shared/add-item-row";
 import type { CustomFieldDef, ExportColumn, ExportTemplate } from "@/types/domain";
 import {
   DefRows, DetailDrawer, PageHeader, Panel, StatStrip, Status, Timeline, Toolbar,
@@ -370,7 +371,6 @@ export function SettingsScreen({ onOpenAccess }: { onOpenAccess: () => void }) {
   const onboarding=useOnboarding();
   const docTypes=onboarding.config.documentChecklist;
   const setDocTypes=(update:(current:string[])=>string[])=>onboarding.saveConfig({ ...onboarding.config, documentChecklist:update(docTypes) });
-  const [newDocType,setNewDocType]=useState("");
   const fieldDefs=onboarding.config.customFieldDefs;
   const setFieldDefs=(update:(current:CustomFieldDef[])=>CustomFieldDef[])=>onboarding.saveConfig({ ...onboarding.config, customFieldDefs:update(fieldDefs) });
   return <>
@@ -409,7 +409,7 @@ export function SettingsScreen({ onOpenAccess }: { onOpenAccess: () => void }) {
             <strong>Document checklist</strong>
             <small>Required documents collected at onboarding. Add types as clients demand them.</small>
             <div className="settings-chips">{docTypes.map(type=><button key={type} onClick={()=>setDocTypes(current=>current.filter(item=>item!==type))}>{type}<span>✕</span></button>)}</div>
-            <div className="settings-chip-add"><input value={newDocType} onChange={event=>setNewDocType(event.target.value)} placeholder="Add document type (e.g. Driving licence)" aria-label="New document type"/><button className="secondary-button compact" onClick={()=>{ if(!newDocType.trim())return; setDocTypes(current=>[...current,newDocType.trim()]); setNewDocType(""); }}>Add</button></div>
+            <AddItemRow label="Add a required document" placeholder="Document name, e.g. Driving licence" buttonLabel="Add to checklist" existing={docTypes} onAdd={type=>setDocTypes(current=>[...current,type])} />
           </div>
           <div className="settings-chip-editor">
             <strong>Custom profile fields</strong>

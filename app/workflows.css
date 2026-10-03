@@ -58,3 +58,14 @@
 .nominee-photo-row strong{font-size:12px}
 .nominee-photo-row small{font-size:10px;color:var(--muted);margin-top:2px}
 @media(max-width:760px){.editable-row.employee-doc-row{grid-template-columns:1fr 1fr}}
+
+/* Labelled add-item row */
+.add-item-row{display:grid;gap:6px;padding:14px 18px;border-top:1px solid var(--line);background:var(--surface-2)}
+.settings-chip-editor .add-item-row{padding:12px;border:1px dashed var(--line-strong);border-radius:9px}
+.add-item-row>label{font-size:11px;font-weight:650;color:var(--ink)}
+.add-item-controls{display:grid;grid-template-columns:1fr auto;gap:8px}
+.add-item-controls input{height:38px;border:1.5px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--ink);padding:0 11px;font-size:13px;outline:0}
+.add-item-controls input::placeholder{color:var(--muted-2)}
+.add-item-controls input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-tint)}
+.add-item-hint{font-size:10px;color:var(--muted)}
+.add-item-hint.warn{color:var(--warn)}
