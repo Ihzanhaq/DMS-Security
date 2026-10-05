@@ -441,7 +441,7 @@ function RequestScreen({ type }: { type: "leave" | "advance" }) {
     <PageHeader title={advance ? "Salary advance" : "Request leave"} subtitle={advance ? `You can request up to ${rupees(eligibility.maxAdvance)} this month.` : "Your supervisor and HR receive this request."} />
     <div className="max-w-xl">
       <Card className="p-4 sm:p-5">
-        {sent ? <InlineAlert tone="success">{advance ? `Your request for ${rupees(amount)} has been sent to HR.` : "Your leave request has been sent."} You'll be notified when it's reviewed.</InlineAlert> : <FormStack>
+        {sent ? <InlineAlert tone="success">{advance ? `Your request for ${rupees(amount)} has been sent to HR.` : "Your leave request has been sent."} You’ll be notified when it’s reviewed.</InlineAlert> : <FormStack>
           {advance ? <>
             <Field label="Amount" required><InputAffix prefix="₹" type="number" min={1} value={amount} onChange={event => setAmount(Number(event.target.value))} /></Field>
             <Field label="Reason"><Select><option>Personal expense</option><option>Medical</option><option>Emergency</option></Select></Field>
@@ -451,7 +451,7 @@ function RequestScreen({ type }: { type: "leave" | "advance" }) {
               <KeyValue label="Your limit (40%)" value={rupees(eligibility.maxAdvance)} />
               <div className="mt-2"><ProgressBar value={eligibility.maxAdvance > 0 ? Math.min(100, amount / eligibility.maxAdvance * 100) : 100} tone={overLimit ? "danger" : "emerald"} /></div>
             </div>
-            {overLimit && <InlineAlert tone="danger">That's more than your {rupees(eligibility.maxAdvance)} limit. Reduce the amount to continue.</InlineAlert>}
+            {overLimit && <InlineAlert tone="danger">That’s more than your {rupees(eligibility.maxAdvance)} limit. Reduce the amount to continue.</InlineAlert>}
           </> : <>
             <Field label="Leave type"><Select><option>Casual leave</option><option>Sick leave</option></Select></Field>
             <FormGrid>
@@ -611,7 +611,7 @@ function GuardProfile({ activeGuard, onSwitchUser, onSignOut }: { activeGuard: G
           <Button variant="outline" className="justify-start" onClick={() => setSwitching(true)}><Users />Switch guard on this device</Button>
           <Button variant="ghost" className="justify-start text-status-danger hover:bg-status-danger/10" onClick={signOut}><LogOut />Sign out</Button>
         </div>
-        <p className="mt-3 text-xs text-muted">Use "Switch guard" when several guards share one phone at a post.</p>
+        <p className="mt-3 text-xs text-muted">Use “Switch guard” when several guards share one phone at a post.</p>
       </Panel>
     </SplitLayout>
 

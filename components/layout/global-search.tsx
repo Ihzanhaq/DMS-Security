@@ -6,34 +6,28 @@ import { searchApp } from "@/lib/global-search";
 import type { AppView } from "@/types/domain";
 import { cn } from "@/lib/utils";
 
-export function GlobalSearch({
-  open,
-  onClose,
-  onNavigate,
-  canOpen,
-}: {
-  open: boolean;
+type SearchProps = {
   onClose: () => void;
   onNavigate: (view: AppView) => void;
   canOpen: (view: AppView) => boolean;
-}) {
+};
+
+/** Mounting the dialog only while open resets the query each time it opens. */
+export function GlobalSearch({ open, ...props }: SearchProps & { open: boolean }) {
+  return open ? <SearchDialog {...props} /> : null;
+}
+
+function SearchDialog({ onClose, onNavigate, canOpen }: SearchProps) {
   const [query, setQuery] = useState("");
   const results = useMemo(() => searchApp(query, canOpen), [query, canOpen]);
 
   useEffect(() => {
-    if (!open) setQuery("");
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
+  }, [onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 p-4 pt-20" onMouseDown={onClose}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle, ArrowRight, CalendarCheck, CheckCircle2, ChevronRight, Coins, Download, Package, Plus,
   Receipt, Shirt, ShieldCheck, Upload, Wallet,
@@ -182,8 +182,10 @@ export function PayrollScreen({ onAllocation }: { onAllocation: (employeeId: str
   const { getBreakdown, closePeriod, isPeriodClosed } = usePayroll();
   const rows = useMemo(() => employees.map(employee => ({ employee, breakdown: getBreakdown(employee.id) })).filter(row => row.breakdown.duties > 0), [getBreakdown]);
   const paid = isPeriodClosed();
-  const [stage, setStage] = useState(paid ? 4 : 2);
-  const [maxStage, setMaxStage] = useState(paid ? 4 : 2);
+  const [chosenStage, setStage] = useState(2);
+  const [reachedStage, setMaxStage] = useState(2);
+  const stage = paid ? 4 : chosenStage;
+  const maxStage = paid ? 4 : reachedStage;
   const [modalEmployee, setModalEmployee] = useState<{ id: string; name: string } | null>(null);
   const exceptions = rows.reduce((sum, row) => sum + row.breakdown.exceptions.length, 0);
   const totals = rows.reduce((result, row) => ({
@@ -192,10 +194,6 @@ export function PayrollScreen({ onAllocation }: { onAllocation: (employeeId: str
     other: result.other + row.breakdown.otherDeductions,
     net: result.net + row.breakdown.net,
   }), { gross: 0, statutory: 0, other: 0, net: 0 });
-
-  useEffect(() => {
-    if (paid) { setStage(4); setMaxStage(4); }
-  }, [paid]);
 
   async function advance() {
     if (stage < 4) {
@@ -464,7 +462,7 @@ export function UniformsScreen({ onIssue, onImport }: { onIssue: () => void; onI
         <KeyValue label="Share of workforce" value={`${Math.round(plan.people / 468 * 100)}%`} />
         <KeyValue label="Outstanding balance" value={rupees(plan.deduction * Math.round(plan.people * 0.4))} />
       </Section>
-      <InlineAlert>An employee with an unpaid balance on this plan can't complete exit clearance.</InlineAlert>
+      <InlineAlert>An employee with an unpaid balance on this plan can’t complete exit clearance.</InlineAlert>
     </DetailDrawer>}
 
     {inventoryOpen && <DetailDrawer wide title="Uniform kit stock" subtitle="Central store · Thiruvananthapuram" onClose={() => setInventoryOpen(false)}

@@ -104,7 +104,7 @@ function ComplaintDrawer({ complaint, state, onClose, onResolve }: { complaint: 
         { label: "SLA due", value: complaint.due, mono: true },
       ]} />
     </Section>
-    {!closed && complaint.priority === "High" && <InlineAlert tone="warning" className="mb-5">If this isn't closed by {complaint.due}, it breaches SLA and escalates to district operations and HR.</InlineAlert>}
+    {!closed && complaint.priority === "High" && <InlineAlert tone="warning" className="mb-5">If this isn’t closed by {complaint.due}, it breaches SLA and escalates to district operations and HR.</InlineAlert>}
     <Section title="Investigation trail">{trail.length ? <Timeline entries={trail} /> : <p className="text-sm text-muted">No updates yet.</p>}</Section>
     {!closed && <Section title="Close this complaint">
       <FormStack>
@@ -470,7 +470,7 @@ export function ImportsScreen({ initialKind }: { initialKind?: string }) {
             {spec.fields.map(fieldName => (
               <div key={fieldName} className="grid grid-cols-2 items-center gap-3 px-3 py-2">
                 <strong className="text-sm">{fieldName}</strong>
-                <Select className="h-9" defaultValue={fieldName}><option>{fieldName}</option><option value="ignore">Don't import</option></Select>
+                <Select className="h-9" defaultValue={fieldName}><option>{fieldName}</option><option value="ignore">Don’t import</option></Select>
               </div>
             ))}
           </div>

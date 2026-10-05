@@ -34,7 +34,6 @@ import { GlobalSearch } from "./global-search";
 import { BottomNav } from "./bottom-nav";
 import { CreateMenu } from "./create-menu";
 import { FAB } from "@/components/ui-kit";
-import { Button } from "@/components/ui-kit";
 
 export function HrmsApp() {
   return (
@@ -71,7 +70,8 @@ function HrmsShell() {
   const [ticketCreate, setTicketCreate] = useState(false);
   const [guestGuard, setGuestGuard] = useState<GuardUser | null>(null);
   const activeGuard: GuardUser = guestGuard ?? { id: currentUser.employeeId ?? currentUser.id, name: currentUser.name, initials: currentUser.initials };
-  const [activeModuleId, setActiveModuleId] = useState("overview");
+  // Set while the user browses another rail section; cleared on navigation so the rail follows the open screen.
+  const [browsedModuleId, setBrowsedModuleId] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const notify = useToast();
   const onboarding = useOnboarding();
@@ -117,10 +117,7 @@ function HrmsShell() {
     })).filter(mod => mod.items.length);
   }, [portal, canOpen]);
 
-  useEffect(() => {
-    const mod = navModules.find(m => m.items.some(i => i.view === view));
-    if (mod) setActiveModuleId(mod.id);
-  }, [view, navModules]);
+  const activeModuleId = browsedModuleId ?? navModules.find(mod => mod.items.some(item => item.view === view))?.id ?? navModules[0]?.id ?? "";
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -160,6 +157,7 @@ function HrmsShell() {
     setNotificationsOpen(false);
     setImportKind(undefined);
     setTicketCreate(false);
+    setBrowsedModuleId(null);
     const url = new URL(window.location.href);
     url.searchParams.set("view", nextView);
     window.history.replaceState({}, "", url);
@@ -247,7 +245,7 @@ function HrmsShell() {
         modules={navModules}
         activeView={view}
         activeModuleId={activeModuleId}
-        onSelectModule={setActiveModuleId}
+        onSelectModule={setBrowsedModuleId}
         onNavigate={navigate}
         attentionCount={attention.count}
         onAttention={() => navigate(attention.view)}
@@ -370,9 +368,9 @@ function renderView(view: AppView, ctx: ViewContext) {
     case "settings": return <SettingsScreen onOpenAccess={() => navigate("access")} />;
     case "employee-form": return <EmployeeFormScreen key={`${editingEmployeeId ?? "new"}-${onboardingReady}`} employeeId={editingEmployeeId} onBack={() => navigate("workforce")} onImport={() => openImports("Employees")} />;
     case "site-config": return <SiteConfigurationScreen role={role.name} siteName={selectedSite} initialTab={siteInitialTab} onBack={() => navigate(canOpen("sites") ? "sites" : "payroll")} />;
-    case "payroll-allocation": return <PayrollAllocationScreen employeeId={allocationEmployeeId} onBack={() => navigate("payroll")} />;
+    case "payroll-allocation": return <PayrollAllocationScreen key={allocationEmployeeId ?? "default"} employeeId={allocationEmployeeId} onBack={() => navigate("payroll")} />;
     case "night-vigilance": return <NightVigilanceScreen onBack={() => navigate("dashboard")} />;
-    case "exit-clearance": return <ExitClearanceScreen onBack={() => navigate("workforce")} />;
+    case "exit-clearance": return <ExitClearanceScreen />;
     case "penalties": return <PenaltiesScreen onBack={() => navigate("payroll")} />;
     case "spare-payments": return <SparePaymentsScreen />;
     case "hr-quality": return <HrQualityScreen />;
@@ -380,7 +378,7 @@ function renderView(view: AppView, ctx: ViewContext) {
     case "tickets": return <TicketsScreen key={ticketCreate ? "create" : "list"} startCreating={ticketCreate} />;
     case "analytics": return <AnalyticsScreen />;
     case "access": return <AccessScreen />;
-    case "action-centre": return <ActionCentreScreen onBack={() => navigate("dashboard")} onOpen={navigate} />;
+    case "action-centre": return <ActionCentreScreen onOpen={navigate} />;
     case "assignment-form": return <DetailedWorkflowScreen kind="assignment" onBack={() => navigate("deployment")} />;
     case "attendance-correction": return <DetailedWorkflowScreen kind="attendance" onBack={() => navigate("attendance")} />;
     case "uniform-issue": return <DetailedWorkflowScreen kind="uniform" onBack={() => navigate("uniforms")} />;

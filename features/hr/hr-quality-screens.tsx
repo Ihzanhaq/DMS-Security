@@ -104,7 +104,7 @@ export function HrQualityScreen() {
       <FormStack>
         <Field label="How satisfied is the guard? (1–10)"><Select value={score} onChange={event => setScore(Number(event.target.value))}>{scoreOptions.map(value => <option key={value} value={value}>{value}</option>)}</Select></Field>
         <Field label="Notes"><Textarea rows={4} value={notes} onChange={event => setNotes(event.target.value)} placeholder="Site conditions, uniform, salary clarity, supervisor behaviour…" /></Field>
-        <InlineAlert tone={score <= 4 ? "warning" : "info"}>A score of 4 or below flags the site's field officer for a follow-up visit.</InlineAlert>
+        <InlineAlert tone={score <= 4 ? "warning" : "info"}>A score of 4 or below flags the site’s field officer for a follow-up visit.</InlineAlert>
       </FormStack>
     </DetailDrawer>}
   </>;

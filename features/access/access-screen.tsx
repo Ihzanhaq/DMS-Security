@@ -166,7 +166,7 @@ function UserEditor({ user, readOnly, onClose }: { user: AccessUser; readOnly: b
     </Section>
     {internal ? <Section title="Permissions">
       {!readOnly && Object.keys(draft.overrides).length > 0 && <div className="mb-3 flex justify-end"><Button size="sm" variant="ghost" onClick={() => setDraft({ ...draft, overrides: {} })}><RotateCcw />Reset to role defaults</Button></div>}
-      {role?.locked && <InlineAlert className="mb-3">{role.name} always has full access. Overrides don't apply.</InlineAlert>}
+      {role?.locked && <InlineAlert className="mb-3">{role.name} always has full access. Overrides don’t apply.</InlineAlert>}
       <div className="overflow-hidden rounded-xl border border-border">
         <div className="hidden grid-cols-[1fr_100px_130px_100px] gap-3 bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted sm:grid">
           <span>Module</span><span>Role default</span><span>Override</span><span>Result</span>
@@ -188,7 +188,7 @@ function UserEditor({ user, readOnly, onClose }: { user: AccessUser; readOnly: b
           })}
         </div>)}
       </div>
-    </Section> : <InlineAlert>{role ? kindLabel[role.kind] : "These"} users only see their own portal, so office permissions don't apply.</InlineAlert>}
+    </Section> : <InlineAlert>{role ? kindLabel[role.kind] : "These"} users only see their own portal, so office permissions don’t apply.</InlineAlert>}
   </DetailDrawer>;
 }
 
@@ -345,6 +345,6 @@ function RoleEditor({ role, isNew, readOnly, onDuplicate, onSaved, onDeleted, on
           </div>
         ))}
       </div>)}
-    </div> : <InlineAlert className="mt-4">{kindLabel[draft.kind]} roles open their own portal only, so there's no permission matrix.</InlineAlert>}
+    </div> : <InlineAlert className="mt-4">{kindLabel[draft.kind]} roles open their own portal only, so there’s no permission matrix.</InlineAlert>}
   </Panel>;
 }

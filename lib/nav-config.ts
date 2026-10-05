@@ -1,29 +1,22 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  BarChart3,
+  AlertTriangle,
   Building2,
   CalendarCheck,
   ChartBar,
   ClipboardList,
-  Coins,
   FileText,
   HandCoins,
   LayoutDashboard,
+  ListChecks,
   MapPin,
-  Moon,
+  MessageSquare,
   Package,
   Settings,
   Shield,
-  Star,
-  Upload,
-  UserCog,
   UserRound,
   Users,
   Wallet,
-  AlertTriangle,
-  MessageSquare,
-  ArrowLeftRight,
-  ListChecks,
 } from "lucide-react";
 import { NAV } from "@/lib/labels";
 import type { AppView } from "@/types/domain";

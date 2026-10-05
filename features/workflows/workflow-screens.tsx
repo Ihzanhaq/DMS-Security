@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   AlertTriangle, Building2, CalendarCheck, Check, CheckCircle2, ClipboardList, Clock,
   Crosshair, FileText, HandCoins, Package, Plus, Save, ShieldCheck, Trash2, Users, Wallet,
@@ -515,13 +515,6 @@ export function PayrollAllocationScreen({ employeeId: selectedEmployeeId, onBack
   const [employeeId, setEmployeeId] = useState(selectedEmployeeId ?? "BMG-2274");
   const [approved, setApproved] = useState(false);
 
-  useEffect(() => {
-    if (selectedEmployeeId) {
-      setEmployeeId(selectedEmployeeId);
-      setApproved(false);
-    }
-  }, [selectedEmployeeId]);
-
   const employee = employeeRecords.find(item => item.id === employeeId) ?? employeeRecords[0];
   const breakdown = getBreakdown(employeeId);
 
@@ -636,7 +629,7 @@ export function NightVigilanceScreen({ onBack, guardMode = false }: { onBack: ()
 
 /* ------------------------------ Exit clearance ----------------------------- */
 
-export function ExitClearanceScreen({ onBack }: { onBack: () => void }) {
+export function ExitClearanceScreen() {
   const notify = useToast();
   const confirm = useConfirm();
   const { addVacancy } = useOps();
@@ -891,7 +884,7 @@ const actionItems: { id: number; title: string; owner: string; due: string; type
   { id: 4, title: "Complaint CMP-26091 approaching SLA", owner: "District manager", due: "16:00", type: "Complaint", target: "complaints", icon: AlertTriangle },
 ];
 
-export function ActionCentreScreen({ onOpen }: { onBack: () => void; onOpen: (view: string) => void }) {
+export function ActionCentreScreen({ onOpen }: { onOpen: (view: string) => void }) {
   const { canOpen } = useAccess();
   const items = actionItems.filter(item => canOpen(item.target));
   return <>
@@ -1042,7 +1035,7 @@ export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; o
               : <Textarea rows={6} placeholder={kind === "complaint" ? "Describe the issue as reported by the client" : kind === "sop" ? "Step-by-step instructions for this post" : "Registers checked, guard briefing, issues found"} />}
           </Field>
         </div>}
-        {overLimit && <InlineAlert tone="danger" className="mt-4">The amount is above this employee's limit of {rupees(eligibility.maxAdvance)}.</InlineAlert>}
+        {overLimit && <InlineAlert tone="danger" className="mt-4">The amount is above this employee’s limit of {rupees(eligibility.maxAdvance)}.</InlineAlert>}
         <div className="mt-5 flex justify-end gap-2 border-t border-border pt-4">
           <Button variant="outline" onClick={onBack}>Cancel</Button>
           <Button disabled={submitDisabled} onClick={submit}><CheckCircle2 />{config.submit}</Button>
