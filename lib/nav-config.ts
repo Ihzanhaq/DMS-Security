@@ -185,6 +185,6 @@ export const createMenuItems: { label: string; view: AppView; icon: LucideIcon }
   { label: "Inspection visit", view: "inspection-form", icon: ListChecks },
   { label: "Site SOP", view: "sop-form", icon: FileText },
   { label: "Uniform issue", view: "uniform-issue", icon: Package },
-  { label: "Advance request", view: "advances", icon: HandCoins },
+  { label: "Salary advance", view: "advance-form", icon: HandCoins },
   { label: "Deployment assignment", view: "assignment-form", icon: ClipboardList },
 ];

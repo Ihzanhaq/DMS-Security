@@ -68,6 +68,7 @@ function HrmsShell() {
   const [selectedSite, setSelectedSite] = useState<string | null>(null);
   const [siteInitialTab, setSiteInitialTab] = useState<"profile" | "salary" | "boundary">("profile");
   const [importKind, setImportKind] = useState<string | undefined>();
+  const [ticketCreate, setTicketCreate] = useState(false);
   const [guestGuard, setGuestGuard] = useState<GuardUser | null>(null);
   const activeGuard: GuardUser = guestGuard ?? { id: currentUser.employeeId ?? currentUser.id, name: currentUser.name, initials: currentUser.initials };
   const [activeModuleId, setActiveModuleId] = useState("overview");
@@ -157,6 +158,8 @@ function HrmsShell() {
   const navigate = (nextView: string) => {
     setView(nextView as AppView);
     setNotificationsOpen(false);
+    setImportKind(undefined);
+    setTicketCreate(false);
     const url = new URL(window.location.href);
     url.searchParams.set("view", nextView);
     window.history.replaceState({}, "", url);
@@ -181,6 +184,8 @@ function HrmsShell() {
 
   const openEmployeeForm = (employeeId: string | null) => { setEditingEmployeeId(employeeId); navigate("employee-form"); };
   const openAllocationAudit = (employeeId?: string) => { setAllocationEmployeeId(employeeId ?? null); navigate("payroll-allocation"); };
+  const openImports = (kind: string) => { navigate("imports"); setImportKind(kind); };
+  const openNewTicket = () => { navigate("tickets"); setTicketCreate(true); };
   const openSiteConfig = (site: string | null, tab: "profile" | "salary" | "boundary" = "profile") => {
     setSelectedSite(site);
     setSiteInitialTab(tab);
@@ -190,8 +195,8 @@ function HrmsShell() {
   const blockReadOnlyActions = (event: MouseEvent<HTMLDivElement>) => {
     if (!readOnly) return;
     const button = (event.target as HTMLElement).closest("button");
-    if (!button || button.hasAttribute("data-allow")) return;
-    if (button.disabled) return;
+    if (!button || button.hasAttribute("data-allow") || button.disabled) return;
+    if (!button.matches('[data-variant="default"], [data-variant="destructive"], [data-variant="outline"][data-size="sm"]')) return;
     event.preventDefault();
     event.stopPropagation();
     notify({ message: "View-only access — ask an administrator for edit rights", kind: "info" });
@@ -268,24 +273,27 @@ function HrmsShell() {
         />
 
         <main className="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden pb-24 md:pb-8">
-          <div className="p-3 md:px-5 md:py-5 lg:px-6" ref={contentRef} onClickCapture={blockReadOnlyActions}>
+          <div className="mx-auto max-w-[1580px] p-3 md:px-5 md:py-5 lg:px-6" ref={contentRef} onClickCapture={blockReadOnlyActions} data-read-only={readOnly || undefined}>
             {readOnly && (
               <div className="mb-4 flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm" data-enter>
                 <Lock className="h-4 w-4 text-muted" />
-                <span><strong>View only.</strong> You can read this screen; changes need edit access.</span>
+                <span><strong>View only.</strong> You can browse this screen, but saving changes needs edit access. Ask an administrator.</span>
               </div>
             )}
-            {renderView(
-              view, currentRole, navigate, editingEmployeeId, openEmployeeForm, allocationEmployeeId, openAllocationAudit,
-              selectedSite, openSiteConfig, siteInitialTab, canOpen, onboarding.ready, importKind, setImportKind,
-              activeGuard, guard => {
+            {renderView(view, {
+              role: currentRole, navigate, canOpen, onboardingReady: onboarding.ready,
+              editingEmployeeId, openEmployeeForm, allocationEmployeeId, openAllocationAudit,
+              selectedSite, openSiteConfig, siteInitialTab, importKind, openImports, ticketCreate,
+              activeGuard,
+              onSwitchGuard: guard => {
                 const registered = users.find(user => user.employeeId === guard.id && user.status === "active");
                 if (registered) { signInAs(registered.id); setGuestGuard(null); }
                 else setGuestGuard(guard);
                 notify(`Signed in as ${guard.name}`);
                 navigate("guard-home");
-              }, () => setSignedOut(true),
-            )}
+              },
+              onSignOut: () => setSignedOut(true),
+            })}
           </div>
         </main>
       </div>
@@ -296,38 +304,46 @@ function HrmsShell() {
       )}
 
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} onNavigate={navigate} canOpen={canOpen} />
-      <CreateMenu open={createOpen} onClose={() => setCreateOpen(false)} onNavigate={v => {
-        if (v === "employee-form") openEmployeeForm(null);
-        else if (v === "site-config") openSiteConfig(null);
-        else if (v === "advances") navigate("advances");
-        else navigate(v);
+      <CreateMenu open={createOpen} onClose={() => setCreateOpen(false)} onNavigate={target => {
+        if (target === "employee-form") openEmployeeForm(null);
+        else if (target === "site-config") openSiteConfig(null);
+        else if (target === "tickets") openNewTicket();
+        else navigate(target);
       }} canOpen={canOpen} />
     </div>
   );
 }
 
-function renderView(
-  view: AppView,
-  role: AccessRole,
-  navigate: (view: string) => void,
-  editingEmployeeId: string | null,
-  openEmployeeForm: (employeeId: string | null) => void,
-  allocationEmployeeId: string | null,
-  openAllocationAudit: (employeeId?: string) => void,
-  selectedSite: string | null,
-  openSiteConfig: (site: string | null, tab?: "profile" | "salary" | "boundary") => void,
-  siteInitialTab: "profile" | "salary" | "boundary",
-  canOpen: (view: AppView) => boolean,
-  onboardingReady: boolean,
-  importKind: string | undefined,
-  setImportKind: (k: string | undefined) => void,
-  activeGuard?: GuardUser,
-  onSwitchUser?: (user: GuardUser) => void,
-  onGuardSignOut?: () => void,
-) {
+type SiteTab = "profile" | "salary" | "boundary";
+
+type ViewContext = {
+  role: AccessRole;
+  navigate: (view: string) => void;
+  canOpen: (view: AppView) => boolean;
+  onboardingReady: boolean;
+  editingEmployeeId: string | null;
+  openEmployeeForm: (employeeId: string | null) => void;
+  allocationEmployeeId: string | null;
+  openAllocationAudit: (employeeId?: string) => void;
+  selectedSite: string | null;
+  openSiteConfig: (site: string | null, tab?: SiteTab) => void;
+  siteInitialTab: SiteTab;
+  importKind: string | undefined;
+  openImports: (kind: string) => void;
+  ticketCreate: boolean;
+  activeGuard: GuardUser;
+  onSwitchGuard: (user: GuardUser) => void;
+  onSignOut: () => void;
+};
+
+function renderView(view: AppView, ctx: ViewContext) {
+  const {
+    role, navigate, canOpen, onboardingReady, editingEmployeeId, openEmployeeForm, allocationEmployeeId,
+    openAllocationAudit, selectedSite, openSiteConfig, siteInitialTab, importKind, openImports, ticketCreate,
+  } = ctx;
   if (view === "guard-vigilance") return <NightVigilanceScreen guardMode onBack={() => navigate("guard-home")} />;
   if (view.startsWith("guard-")) {
-    return <GuardPortal view={view} onNavigate={next => navigate(next)} activeGuard={activeGuard} onSwitchUser={onSwitchUser} onSignOut={onGuardSignOut} />;
+    return <GuardPortal view={view} onNavigate={next => navigate(next)} activeGuard={ctx.activeGuard} onSwitchUser={ctx.onSwitchGuard} onSignOut={ctx.onSignOut} />;
   }
   if (view.startsWith("client-")) return <ClientPortal view={view} onNavigate={next => navigate(next)} />;
   switch (view) {
@@ -336,8 +352,8 @@ function renderView(
     case "sites": return (
       <SitesScreen
         onCreate={() => openSiteConfig(null)}
-        onConfigure={site => openSiteConfig(site)}
-        onEditBoundary={site => openSiteConfig(site, "boundary")}
+        onConfigure={(site: string) => openSiteConfig(site)}
+        onEditBoundary={(site: string) => openSiteConfig(site, "boundary")}
       />
     );
     case "deployment": return <DeploymentScreen onAssign={() => navigate("assignment-form")} />;
@@ -345,14 +361,14 @@ function renderView(
     case "attendance": return <AttendanceScreen onCorrect={() => navigate("attendance-correction")} />;
     case "payroll": return <PayrollScreen onAllocation={openAllocationAudit} />;
     case "advances": return <AdvancesScreen onCreate={() => navigate("advance-form")} />;
-    case "uniforms": return <UniformsScreen onIssue={() => navigate("uniform-issue")} onImport={() => { setImportKind("employees"); navigate("imports"); }} />;
+    case "uniforms": return <UniformsScreen onIssue={() => navigate("uniform-issue")} onImport={() => openImports("Opening balances")} />;
     case "inspections": return <InspectionsScreen onLog={() => navigate("inspection-form")} />;
     case "complaints": return <ComplaintsScreen onCreate={() => navigate("complaint-form")} />;
     case "sops": return <SopsScreen onCreate={() => navigate("sop-form")} />;
     case "reports": return <ReportsScreen />;
-    case "imports": return <ImportsScreen initialKind={importKind} />;
+    case "imports": return <ImportsScreen key={importKind ?? "default"} initialKind={importKind} />;
     case "settings": return <SettingsScreen onOpenAccess={() => navigate("access")} />;
-    case "employee-form": return <EmployeeFormScreen key={`${editingEmployeeId ?? "new"}-${onboardingReady}`} employeeId={editingEmployeeId} onBack={() => navigate("workforce")} onImport={() => { setImportKind("employees"); navigate("imports"); }} />;
+    case "employee-form": return <EmployeeFormScreen key={`${editingEmployeeId ?? "new"}-${onboardingReady}`} employeeId={editingEmployeeId} onBack={() => navigate("workforce")} onImport={() => openImports("Employees")} />;
     case "site-config": return <SiteConfigurationScreen role={role.name} siteName={selectedSite} initialTab={siteInitialTab} onBack={() => navigate(canOpen("sites") ? "sites" : "payroll")} />;
     case "payroll-allocation": return <PayrollAllocationScreen employeeId={allocationEmployeeId} onBack={() => navigate("payroll")} />;
     case "night-vigilance": return <NightVigilanceScreen onBack={() => navigate("dashboard")} />;
@@ -361,7 +377,7 @@ function renderView(
     case "spare-payments": return <SparePaymentsScreen />;
     case "hr-quality": return <HrQualityScreen />;
     case "recruitment": return <RecruitmentScreen />;
-    case "tickets": return <TicketsScreen />;
+    case "tickets": return <TicketsScreen key={ticketCreate ? "create" : "list"} startCreating={ticketCreate} />;
     case "analytics": return <AnalyticsScreen />;
     case "access": return <AccessScreen />;
     case "action-centre": return <ActionCentreScreen onBack={() => navigate("dashboard")} onOpen={navigate} />;

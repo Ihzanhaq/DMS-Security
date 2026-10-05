@@ -1,34 +1,46 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  ArrowCounterClockwise, Copy, FloppyDisk, LockSimple, Plus, ShieldCheck, SignIn, Trash, UserGear, UsersThree, WarningCircle,
-} from "@phosphor-icons/react";
+import { Copy, Eye, Lock, Plus, RotateCcw, Save, ShieldCheck, Trash2, UserCog, Users } from "lucide-react";
 import { useAccess } from "@/components/shared/access-context";
 import {
-  DetailDrawer, PageHeader, Panel, PersonCell, StatStrip, Status, Toolbar,
-} from "@/components/shared/screen-elements";
+  Button, DataTable, DetailDrawer, EmptyState, Field, FormGrid, InlineAlert, Input, ListFilterRow, PageHeader, Panel,
+  PersonCell, SearchBar, Section, SegmentedControl, Select, StatStrip, StatusChip, useConfirm,
+} from "@/components/ui-kit";
 import { useToast } from "@/components/shared/toast-context";
 import {
   effectivePermissions, initialsOf, noAccess, overrideCount, permissionModules, reportsToCreatesCycle,
   type AccessRole, type AccessUser, type PermissionLevel, type PermissionMap, type PortalKind,
 } from "@/lib/access";
+import { ACTIONS, NAV } from "@/lib/labels";
+import { cn } from "@/lib/utils";
 import type { AppView } from "@/types/domain";
 
 const levels: PermissionLevel[] = ["none", "view", "edit"];
 const levelLabel: Record<PermissionLevel, string> = { none: "No access", view: "View", edit: "Edit" };
+const levelChipClass: Record<PermissionLevel, string> = {
+  none: "bg-muted/15 text-muted",
+  view: "bg-navy/10 text-navy dark:text-foreground",
+  edit: "bg-emerald/10 text-emerald",
+};
 const groups = Array.from(new Set(permissionModules.map(module => module.group)));
 const kindLabel: Record<PortalKind, string> = { internal: "Office staff", guard: "Guard app", client: "Client portal" };
 
 function LevelPicker({ value, onChange, disabled, label }: { value: PermissionLevel; onChange: (level: PermissionLevel) => void; disabled?: boolean; label: string }) {
-  return <span className="level-picker" role="radiogroup" aria-label={label}>
-    {levels.map(level => <button key={level} type="button" role="radio" aria-checked={value === level} disabled={disabled}
-      className={value === level ? `active ${level}` : undefined} onClick={() => onChange(level)}>{levelLabel[level]}</button>)}
-  </span>;
+  return (
+    <span className="inline-flex rounded-lg border border-border bg-surface p-0.5" role="radiogroup" aria-label={label}>
+      {levels.map(level => (
+        <button key={level} type="button" role="radio" aria-checked={value === level} disabled={disabled} onClick={() => onChange(level)}
+          className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed", value === level ? cn("shadow-sm", level === "none" ? "bg-card text-foreground" : level === "view" ? "bg-navy text-white" : "bg-emerald text-white") : "text-muted hover:text-foreground")}>
+          {levelLabel[level]}
+        </button>
+      ))}
+    </span>
+  );
 }
 
 function LevelChip({ level }: { level: PermissionLevel }) {
-  return <span className={`level-chip ${level}`}>{levelLabel[level]}</span>;
+  return <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium", levelChipClass[level])}>{levelLabel[level]}</span>;
 }
 
 export function AccessScreen() {
@@ -36,14 +48,14 @@ export function AccessScreen() {
   const [tab, setTab] = useState<"Users" | "Roles">("Users");
   const readOnly = !can("access", "edit");
   return <>
-    <PageHeader title="Users & roles" description="Roles set the baseline permissions; each user can be fine-tuned with overrides." />
-    {readOnly && <div className="inline-alert warning access-readonly"><LockSimple /><span>You can view access settings but not change them. Ask an administrator for edit access to Users &amp; roles.</span></div>}
-    <div className="tabs-row">{(["Users", "Roles"] as const).map(item => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</div>
+    <PageHeader title={NAV.access} subtitle="Roles set the baseline permissions. Individual users can be fine-tuned with overrides." />
+    {readOnly && <InlineAlert tone="warning" className="mb-4">You can view access settings but not change them. Ask an administrator for edit access to Users and roles.</InlineAlert>}
+    <SegmentedControl options={["Users", "Roles"] as const} value={tab} onChange={setTab} />
     {tab === "Users" ? <UsersTab readOnly={readOnly} /> : <RolesTab readOnly={readOnly} />}
   </>;
 }
 
-/* --------------------------------- Users --------------------------------- */
+/* ---------------------------------- Users --------------------------------- */
 
 function UsersTab({ readOnly }: { readOnly: boolean }) {
   const { users, roles, currentUser, signInAs } = useAccess();
@@ -55,44 +67,47 @@ function UsersTab({ readOnly }: { readOnly: boolean }) {
   const roleOf = (id: string) => roles.find(role => role.id === id);
 
   const visible = users.filter(user =>
-    (roleFilter === "all" || user.roleId === roleFilter) &&
-    (statusFilter === "all" || user.status === statusFilter) &&
-    `${user.name} ${user.email} ${user.phone}`.toLowerCase().includes(query.toLowerCase()));
+    (roleFilter === "all" || user.roleId === roleFilter)
+    && (statusFilter === "all" || user.status === statusFilter)
+    && `${user.name} ${user.email} ${user.phone}`.toLowerCase().includes(query.toLowerCase()));
 
   const blankUser = (): AccessUser => ({ id: `U-${Date.now().toString().slice(-6)}`, name: "", initials: "", email: "", phone: "", roleId: "field-officer", overrides: {}, status: "active" });
 
   return <>
     <StatStrip items={[
-      { icon: UsersThree, value: String(users.filter(user => user.status === "active").length), label: "Active users", note: `${users.length} in total` },
-      { icon: ShieldCheck, value: String(roles.length), label: "Roles", note: `${roles.filter(role => !role.builtIn).length} custom`, tone: "violet" },
-      { icon: UserGear, value: String(users.filter(user => overrideCount(user, roleOf(user.roleId)) > 0).length), label: "With overrides", note: "Fine-tuned beyond their role", tone: "orange" },
-      { icon: LockSimple, value: String(users.filter(user => user.status === "disabled").length), label: "Disabled", note: "Cannot sign in" },
+      { icon: Users, value: String(users.filter(user => user.status === "active").length), label: "Active users", note: `${users.length} in total` },
+      { icon: ShieldCheck, value: String(roles.length), label: "Roles", note: `${roles.filter(role => !role.builtIn).length} custom` },
+      { icon: UserCog, value: String(users.filter(user => overrideCount(user, roleOf(user.roleId)) > 0).length), label: "With overrides", note: "Fine-tuned beyond their role", tone: "orange" },
+      { icon: Lock, value: String(users.filter(user => user.status === "disabled").length), label: "Disabled", note: "Cannot sign in" },
     ]} />
-    <Toolbar>
-      <div className="filter-search"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search name, email or phone" aria-label="Search users" /></div>
-      <select value={roleFilter} onChange={event => setRoleFilter(event.target.value)} aria-label="Filter by role"><option value="all">All roles</option>{roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}</select>
-      <select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} aria-label="Filter by status"><option value="all">All status</option><option value="active">Active</option><option value="disabled">Disabled</option></select>
-      <span className="toolbar-count">{visible.length} users</span>
-      {!readOnly && <button className="primary-button" onClick={() => setEditing(blankUser())}><Plus />Add user</button>}
-    </Toolbar>
-    <Panel className="table-panel"><div className="data-table-wrap"><table className="data-table"><thead><tr><th>User</th><th>Email</th><th>Role</th><th>Portal</th><th>Overrides</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-      {visible.map(user => {
-        const role = roleOf(user.roleId);
-        const count = overrideCount(user, role);
-        return <tr key={user.id} tabIndex={0} onClick={() => setEditing(user)} onKeyDown={event => { if (event.key === "Enter") setEditing(user); }}>
-          <td><PersonCell name={user.name} id={user.employeeId ?? user.id} phone={user.phone || undefined} /></td>
-          <td>{user.email || "—"}</td>
-          <td><strong>{role?.name ?? "Missing role"}</strong></td>
-          <td>{role ? kindLabel[role.kind] : "—"}</td>
-          <td>{count ? <Status tone="warning">{count} override{count === 1 ? "" : "s"}</Status> : <span className="muted-text">Role only</span>}</td>
-          <td><Status tone={user.status === "active" ? "success" : "neutral"}>{user.status}</Status></td>
-          <td><span className="decision-buttons" onClick={event => event.stopPropagation()}>
-            <button className="secondary-button compact" data-allow onClick={() => setEditing(user)}>{readOnly ? "View" : "Edit"}</button>
-            <button className="secondary-button compact" data-allow disabled={user.status !== "active" || user.id === currentUser.id} onClick={() => { signInAs(user.id); notify(`Signed in as ${user.name}`); }}><SignIn />Sign in as</button>
-          </span></td>
-        </tr>;
-      })}
-    </tbody></table>{visible.length === 0 && <div className="empty-state"><UsersThree size={26} /><strong>No users match</strong><span>Change the search or filters.</span></div>}</div></Panel>
+    <SearchBar value={query} onChange={setQuery} placeholder="Search by name, email or phone" />
+    <ListFilterRow>
+      <div className="flex flex-wrap gap-2">
+        <Select className="h-9 w-auto" value={roleFilter} onChange={event => setRoleFilter(event.target.value)} aria-label="Role"><option value="all">All roles</option>{roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}</Select>
+        <Select className="h-9 w-auto" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} aria-label="Status"><option value="all">Any status</option><option value="active">Active</option><option value="disabled">Disabled</option></Select>
+        <span className="self-center text-xs text-muted">{visible.length} users</span>
+      </div>
+      {!readOnly && <Button onClick={() => setEditing(blankUser())}><Plus />Add user</Button>}
+    </ListFilterRow>
+    <Panel flush>
+      <DataTable rows={visible} rowKey={row => row.id} onRowClick={setEditing}
+        empty={<div className="p-4"><EmptyState icon={Users} title="No users match" message="Change the search or filters." /></div>}
+        columns={[
+          { header: "User", cell: user => <PersonCell name={user.name} id={user.employeeId ?? user.id} phone={user.phone || undefined} /> },
+          { header: "Email", cell: user => user.email || "—", hideOnMobile: true },
+          { header: "Role", cell: user => <strong>{roleOf(user.roleId)?.name ?? "Missing role"}</strong> },
+          { header: "Portal", cell: user => { const role = roleOf(user.roleId); return role ? kindLabel[role.kind] : "—"; }, hideOnMobile: true },
+          { header: "Overrides", cell: user => { const count = overrideCount(user, roleOf(user.roleId)); return count ? <StatusChip tone="warning">{count} override{count === 1 ? "" : "s"}</StatusChip> : <span className="text-xs text-muted">Role only</span>; } },
+          { header: "Status", cell: user => <StatusChip tone={user.status === "active" ? "success" : "neutral"}>{user.status === "active" ? "Active" : "Disabled"}</StatusChip> },
+          { header: "Actions", align: "right", cell: user => (
+            <span className="inline-flex gap-1" onClick={event => event.stopPropagation()}>
+              <Button size="sm" variant="ghost" data-allow onClick={() => setEditing(user)}>{readOnly ? "View" : "Edit"}</Button>
+              <Button size="sm" variant="ghost" data-allow disabled={user.status !== "active" || user.id === currentUser.id} title="See the app as this user"
+                onClick={() => { signInAs(user.id); notify(`Viewing as ${user.name}`); }}><Eye />{ACTIONS.viewAs}</Button>
+            </span>
+          ) },
+        ]} />
+    </Panel>
     {editing && <UserEditor key={editing.id} user={editing} readOnly={readOnly} onClose={() => setEditing(null)} />}
   </>;
 }
@@ -100,6 +115,7 @@ function UsersTab({ readOnly }: { readOnly: boolean }) {
 function UserEditor({ user, readOnly, onClose }: { user: AccessUser; readOnly: boolean; onClose: () => void }) {
   const { roles, users, saveUser, deleteUser } = useAccess();
   const notify = useToast();
+  const confirm = useConfirm();
   const [draft, setDraft] = useState<AccessUser>(user);
   const [problem, setProblem] = useState<string | null>(null);
   const isNew = !users.some(item => item.id === user.id);
@@ -115,65 +131,68 @@ function UserEditor({ user, readOnly, onClose }: { user: AccessUser; readOnly: b
   });
 
   const save = () => {
-    if (!draft.name.trim()) { setProblem("Name is required."); return; }
+    if (!draft.name.trim()) { setProblem("Enter the user's full name."); return; }
     const result = saveUser({ ...draft, name: draft.name.trim(), initials: initialsOf(draft.name) });
     if (result) { setProblem(result); return; }
-    notify(`${draft.name.trim()} saved`);
+    notify(isNew ? "User added" : "User saved");
     onClose();
   };
-  const remove = () => {
+  const remove = async () => {
+    if (!await confirm({ title: `Delete ${draft.name}?`, description: "They lose access immediately. To keep their history and block sign-in instead, set the status to Disabled.", confirmLabel: "Delete user", destructive: true })) return;
     const result = deleteUser(draft.id);
     if (result) { setProblem(result); return; }
-    notify(`${draft.name} deleted`);
+    notify("User deleted");
     onClose();
   };
 
-  return <DetailDrawer title={isNew ? "New user" : draft.name} subtitle={isNew ? "Choose a role, then fine-tune if needed" : `${draft.id} · ${role?.name ?? "No role"}`} avatar={initialsOf(draft.name || "?")} onClose={onClose} wide
-    footer={readOnly ? <button className="secondary-button" data-allow onClick={onClose}>Close</button> : <>
-      {!isNew && <button className="secondary-button danger-text" data-allow onClick={remove}><Trash />Delete</button>}
-      <button className="secondary-button" data-allow onClick={onClose}>Cancel</button>
-      <button className="primary-button" data-allow onClick={save}><FloppyDisk />Save user</button>
+  return <DetailDrawer wide title={isNew ? "Add user" : draft.name} subtitle={isNew ? "Choose a role, then fine-tune permissions if needed" : `${draft.id} · ${role?.name ?? "No role"}`} onClose={onClose}
+    footer={readOnly ? <Button variant="outline" data-allow onClick={onClose}>Close</Button> : <>
+      {!isNew && <Button variant="ghost" className="mr-auto text-status-danger hover:bg-status-danger/10" data-allow onClick={remove}><Trash2 />Delete user</Button>}
+      <Button variant="outline" data-allow onClick={onClose}>Cancel</Button>
+      <Button data-allow onClick={save}><Save />{isNew ? "Add user" : "Save changes"}</Button>
     </>}>
-    {problem && <div className="drawer-section"><div className="inline-alert warning"><WarningCircle /><span>{problem}</span></div></div>}
-    <div className="drawer-section">
-      <h3>Account</h3>
-      <fieldset className="form-grid access-form" disabled={readOnly}>
-        <label><span>Full name</span><input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} placeholder="Name" /></label>
-        <label><span>Email</span><input type="email" value={draft.email} onChange={event => setDraft({ ...draft, email: event.target.value })} /></label>
-        <label><span>Phone</span><input value={draft.phone} onChange={event => setDraft({ ...draft, phone: event.target.value })} /></label>
-        <label><span>Status</span><select value={draft.status} onChange={event => setDraft({ ...draft, status: event.target.value as AccessUser["status"] })}><option value="active">Active</option><option value="disabled">Disabled</option></select></label>
-        <label><span>Role</span><select value={draft.roleId} onChange={event => setDraft({ ...draft, roleId: event.target.value, overrides: {} })}>{roles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><small>Changing role clears this user&apos;s overrides.</small></label>
-        {role?.kind === "guard" && <label><span>Employee ID</span><input value={draft.employeeId ?? ""} onChange={event => setDraft({ ...draft, employeeId: event.target.value || undefined })} placeholder="BMG-0000" /></label>}
+    {problem && <InlineAlert tone="danger" className="mb-4">{problem}</InlineAlert>}
+    <Section title="Account">
+      <fieldset disabled={readOnly}>
+        <FormGrid>
+          <Field label="Full name" required><Input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} placeholder="Name" /></Field>
+          <Field label="Email"><Input type="email" value={draft.email} onChange={event => setDraft({ ...draft, email: event.target.value })} /></Field>
+          <Field label="Phone"><Input value={draft.phone} onChange={event => setDraft({ ...draft, phone: event.target.value })} /></Field>
+          <Field label="Status" hint="Disabled users keep their history but can't sign in."><Select value={draft.status} onChange={event => setDraft({ ...draft, status: event.target.value as AccessUser["status"] })}><option value="active">Active</option><option value="disabled">Disabled</option></Select></Field>
+          <Field label="Role" hint="Changing the role clears this user's overrides."><Select value={draft.roleId} onChange={event => setDraft({ ...draft, roleId: event.target.value, overrides: {} })}>{roles.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
+          {role?.kind === "guard" && <Field label="Employee ID"><Input value={draft.employeeId ?? ""} onChange={event => setDraft({ ...draft, employeeId: event.target.value || undefined })} placeholder="BMG-0000" /></Field>}
+        </FormGrid>
       </fieldset>
-    </div>
-    {internal ? <div className="drawer-section">
-      <div className="access-section-head">
-        <h3>Permissions</h3>
-        {!readOnly && Object.keys(draft.overrides).length > 0 && <button className="text-button" onClick={() => setDraft({ ...draft, overrides: {} })}><ArrowCounterClockwise />Reset to role</button>}
-      </div>
-      {role?.locked && <div className="inline-alert"><LockSimple /><span>{role.name} always has full access. Overrides do not apply.</span></div>}
-      <div className="permission-matrix user-matrix">
-        <div className="matrix-head"><span>Module</span><span>From role</span><span>Override</span><span>Effective</span></div>
-        {groups.map(group => <div key={group} className="matrix-group">
-          <p className="matrix-group-label">{group}</p>
+    </Section>
+    {internal ? <Section title="Permissions">
+      {!readOnly && Object.keys(draft.overrides).length > 0 && <div className="mb-3 flex justify-end"><Button size="sm" variant="ghost" onClick={() => setDraft({ ...draft, overrides: {} })}><RotateCcw />Reset to role defaults</Button></div>}
+      {role?.locked && <InlineAlert className="mb-3">{role.name} always has full access. Overrides don't apply.</InlineAlert>}
+      <div className="overflow-hidden rounded-xl border border-border">
+        <div className="hidden grid-cols-[1fr_100px_130px_100px] gap-3 bg-surface px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted sm:grid">
+          <span>Module</span><span>Role default</span><span>Override</span><span>Result</span>
+        </div>
+        {groups.map(group => <div key={group}>
+          <p className="border-t border-border bg-surface/60 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{group}</p>
           {permissionModules.filter(module => module.group === group).map(module => {
             const override = draft.overrides[module.key];
-            return <div className={override ? "matrix-row overridden" : "matrix-row"} key={module.key}>
-              <span className="matrix-module">{module.label}{module.hint && <small>{module.hint}</small>}</span>
-              <LevelChip level={inherited[module.key] ?? "none"} />
-              <select value={override ?? "inherit"} disabled={readOnly || role?.locked} onChange={event => setOverride(module.key, event.target.value as PermissionLevel | "inherit")} aria-label={`${module.label} override`}>
-                <option value="inherit">Inherit</option>{levels.map(level => <option key={level} value={level}>{levelLabel[level]}</option>)}
-              </select>
-              <LevelChip level={effective[module.key]} />
-            </div>;
+            return (
+              <div key={module.key} className={cn("grid items-center gap-2 border-t border-border px-3 py-2 sm:grid-cols-[1fr_100px_130px_100px] sm:gap-3", override && "bg-status-warn/5")}>
+                <span className="text-sm">{module.label}{module.hint && <small className="block text-xs text-muted">{module.hint}</small>}</span>
+                <LevelChip level={inherited[module.key] ?? "none"} />
+                <Select className="h-8 text-xs" value={override ?? "inherit"} disabled={readOnly || role?.locked} onChange={event => setOverride(module.key, event.target.value as PermissionLevel | "inherit")} aria-label={`${module.label} override`}>
+                  <option value="inherit">Use role default</option>{levels.map(level => <option key={level} value={level}>{levelLabel[level]}</option>)}
+                </Select>
+                <LevelChip level={effective[module.key]} />
+              </div>
+            );
           })}
         </div>)}
       </div>
-    </div> : <div className="drawer-section"><div className="inline-alert"><ShieldCheck /><span>{role ? kindLabel[role.kind] : "This"} users see only their own portal. Office permissions do not apply.</span></div></div>}
+    </Section> : <InlineAlert>{role ? kindLabel[role.kind] : "These"} users only see their own portal, so office permissions don't apply.</InlineAlert>}
   </DetailDrawer>;
 }
 
-/* --------------------------------- Roles --------------------------------- */
+/* ---------------------------------- Roles --------------------------------- */
 
 function roleTree(roles: AccessRole[]) {
   const ordered: { role: AccessRole; depth: number }[] = [];
@@ -207,14 +226,24 @@ function RolesTab({ readOnly }: { readOnly: boolean }) {
     builtIn: false,
   });
 
-  return <div className="access-roles-layout">
-    <Panel title="Roles" description="Indented by reporting line." action={!readOnly && <button className="secondary-button compact" onClick={() => startNew()}><Plus />New role</button>}>
-      <div className="role-list">{tree.map(({ role, depth }) => <button key={role.id} className={!draftNew && selected.id === role.id ? "active" : ""} style={{ paddingLeft: 18 + depth * 16 }} onClick={() => { setDraftNew(null); setSelectedId(role.id); }}>
-        <span><strong>{role.name}{role.locked && <LockSimple size={11} />}</strong><small>{kindLabel[role.kind]} · {users.filter(user => user.roleId === role.id).length} users</small></span>
-        {!role.builtIn && <Status tone="info">Custom</Status>}
-      </button>)}
-      {draftNew && <button className="active" style={{ paddingLeft: 18 }}><span><strong>{draftNew.name}</strong><small>Unsaved</small></span><Status tone="warning">New</Status></button>}
-      </div>
+  return <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+    <Panel title="Roles" description="Indented by reporting line." flush action={!readOnly && <Button size="sm" variant="outline" onClick={() => startNew()}><Plus />New role</Button>}>
+      <nav className="grid gap-0.5 p-2">
+        {tree.map(({ role, depth }) => {
+          const active = !draftNew && selected.id === role.id;
+          return (
+            <button key={role.id} type="button" onClick={() => { setDraftNew(null); setSelectedId(role.id); }} style={{ paddingLeft: 12 + depth * 16 }}
+              className={cn("flex items-center justify-between gap-2 rounded-lg py-2 pr-3 text-left", active ? "bg-emerald/10" : "hover:bg-surface")}>
+              <span className="min-w-0">
+                <strong className={cn("flex items-center gap-1 text-sm", active && "text-emerald")}>{role.name}{role.locked && <Lock className="h-3 w-3" />}</strong>
+                <small className="text-xs text-muted">{kindLabel[role.kind]} · {users.filter(user => user.roleId === role.id).length} users</small>
+              </span>
+              {!role.builtIn && <StatusChip tone="info">Custom</StatusChip>}
+            </button>
+          );
+        })}
+        {draftNew && <div className="flex items-center justify-between rounded-lg bg-emerald/10 px-3 py-2"><span><strong className="block text-sm text-emerald">{draftNew.name}</strong><small className="text-xs text-muted">Not saved yet</small></span><StatusChip tone="warning">New</StatusChip></div>}
+      </nav>
     </Panel>
     <RoleEditor key={selected.id} role={selected} isNew={Boolean(draftNew)} readOnly={readOnly}
       onDuplicate={() => startNew(selected)}
@@ -230,6 +259,7 @@ function RoleEditor({ role, isNew, readOnly, onDuplicate, onSaved, onDeleted, on
 }) {
   const { roles, users, saveRole, deleteRole } = useAccess();
   const notify = useToast();
+  const confirm = useConfirm();
   const [draft, setDraft] = useState<AccessRole>(role);
   const [problem, setProblem] = useState<string | null>(null);
   const locked = Boolean(role.locked);
@@ -247,57 +277,74 @@ function RoleEditor({ role, isNew, readOnly, onDuplicate, onSaved, onDeleted, on
   }));
 
   const save = () => {
-    if (!draft.name.trim()) { setProblem("Role name is required."); return; }
+    if (!draft.name.trim()) { setProblem("Enter a role name."); return; }
     if (roles.some(item => item.id !== draft.id && item.name.toLowerCase() === draft.name.trim().toLowerCase())) { setProblem("Another role already uses this name."); return; }
     const defaultAllowed = !internal || (permissions[permissionModules.find(module => module.views.includes(draft.defaultView))?.key ?? ""] ?? "none") !== "none";
     const next = { ...draft, name: draft.name.trim(), defaultView: defaultAllowed ? draft.defaultView : (landingOptions[0]?.views[0] ?? "dashboard") as AppView };
     const result = saveRole(next);
     if (result) { setProblem(result); return; }
-    notify(`${next.name} saved${defaultAllowed ? "" : " · default screen moved to an allowed module"}`);
+    notify(defaultAllowed ? "Role saved" : "Role saved · start screen moved to a module this role can open");
     onSaved(next.id);
   };
-  const remove = () => {
+  const remove = async () => {
+    if (!await confirm({
+      title: `Delete the ${role.name} role?`,
+      description: assigned.length ? `${assigned.length} user${assigned.length === 1 ? " has" : "s have"} this role and must be moved to another role first.` : "This can't be undone.",
+      confirmLabel: "Delete role",
+      destructive: true,
+    })) return;
     const result = deleteRole(role.id);
     if (result) { setProblem(result); return; }
-    notify(`${role.name} deleted`);
+    notify("Role deleted");
     onDeleted();
   };
 
-  return <Panel title={isNew ? "New role" : draft.name} description={locked ? "Locked — full access to everything. Only the name and description can change." : role.builtIn ? "Built-in role — permissions are editable." : "Custom role."}
-    action={!readOnly && <span className="decision-buttons">
-      {!isNew && <button className="secondary-button compact" onClick={onDuplicate}><Copy />Duplicate</button>}
-      {!isNew && !role.builtIn && <button className="secondary-button compact danger-text" onClick={remove}><Trash />Delete</button>}
-      {isNew && <button className="secondary-button compact" onClick={onCancelNew}>Cancel</button>}
-      <button className="primary-button" disabled={!dirty} onClick={save}><FloppyDisk />Save role</button>
-    </span>}>
-    {problem && <div className="inline-alert warning" style={{ margin: "0 20px 14px" }}><WarningCircle /><span>{problem}</span></div>}
-    <fieldset className="form-grid padded-form access-form" disabled={readOnly}>
-      <label><span>Role name</span><input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></label>
-      <label><span>Portal</span><select value={draft.kind} disabled={!isNew} onChange={event => setDraft({ ...draft, kind: event.target.value as PortalKind, defaultView: event.target.value === "guard" ? "guard-home" : event.target.value === "client" ? "client-home" : "dashboard" })}>
-        {(Object.keys(kindLabel) as PortalKind[]).map(kind => <option key={kind} value={kind}>{kindLabel[kind]}</option>)}
-      </select></label>
-      <label className="span-2"><span>Description</span><input value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></label>
-      {internal && <>
-        <label><span>Reports to</span><select value={draft.reportsTo ?? ""} disabled={locked} onChange={event => setDraft({ ...draft, reportsTo: event.target.value || undefined })}>
-          <option value="">— Top of hierarchy —</option>{parentOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select></label>
-        <label><span>Opens on</span><select value={draft.defaultView} onChange={event => setDraft({ ...draft, defaultView: event.target.value as AppView })}>
-          {landingOptions.map(module => <option key={module.key} value={module.views[0]}>{module.label}</option>)}
-        </select><small>Only modules this role can open are listed.</small></label>
-      </>}
+  return <Panel title={isNew ? "New role" : draft.name}
+    description={locked ? "Locked: full access to everything. Only the name and description can change." : role.builtIn ? "Built-in role. Permissions can be edited." : "Custom role."}
+    action={!readOnly && <>
+      {!isNew && <Button size="sm" variant="ghost" onClick={onDuplicate}><Copy />Duplicate</Button>}
+      {!isNew && !role.builtIn && <Button size="sm" variant="ghost" className="text-status-danger hover:bg-status-danger/10" onClick={remove}><Trash2 />Delete</Button>}
+      {isNew && <Button size="sm" variant="ghost" onClick={onCancelNew}>Cancel</Button>}
+      <Button disabled={!dirty} onClick={save}><Save />{isNew ? "Create role" : "Save changes"}</Button>
+    </>}>
+    {problem && <InlineAlert tone="danger" className="mb-4">{problem}</InlineAlert>}
+    <fieldset disabled={readOnly}>
+      <FormGrid>
+        <Field label="Role name" required><Input value={draft.name} onChange={event => setDraft({ ...draft, name: event.target.value })} /></Field>
+        <Field label="Portal" hint={isNew ? undefined : "Can't be changed after creation."}>
+          <Select value={draft.kind} disabled={!isNew} onChange={event => setDraft({ ...draft, kind: event.target.value as PortalKind, defaultView: event.target.value === "guard" ? "guard-home" : event.target.value === "client" ? "client-home" : "dashboard" })}>
+            {(Object.keys(kindLabel) as PortalKind[]).map(kind => <option key={kind} value={kind}>{kindLabel[kind]}</option>)}
+          </Select>
+        </Field>
+        <div className="sm:col-span-2"><Field label="Description"><Input value={draft.description} onChange={event => setDraft({ ...draft, description: event.target.value })} /></Field></div>
+        {internal && <>
+          <Field label="Reports to">
+            <Select value={draft.reportsTo ?? ""} disabled={locked} onChange={event => setDraft({ ...draft, reportsTo: event.target.value || undefined })}>
+              <option value="">Nobody (top of hierarchy)</option>{parentOptions.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Start screen" hint="Only modules this role can open are listed.">
+            <Select value={draft.defaultView} onChange={event => setDraft({ ...draft, defaultView: event.target.value as AppView })}>
+              {landingOptions.map(module => <option key={module.key} value={module.views[0]}>{module.label}</option>)}
+            </Select>
+          </Field>
+        </>}
+      </FormGrid>
     </fieldset>
-    {!isNew && <p className="role-assigned">{assigned.length ? `Assigned to ${assigned.map(user => user.name).join(", ")}` : "No users have this role yet."}</p>}
-    {internal ? <div className="permission-matrix role-matrix-editor">
-      <div className="matrix-head"><span>Module</span><span>Access</span></div>
-      {groups.map(group => <div key={group} className="matrix-group">
-        <div className="matrix-group-label with-actions"><span>{group}</span>
-          {!readOnly && !locked && <span className="group-bulk">Set all: {levels.map(level => <button key={level} type="button" onClick={() => setGroup(group, level)}>{levelLabel[level]}</button>)}</span>}
+    {!isNew && <p className="mt-4 text-xs text-muted">{assigned.length ? `Assigned to ${assigned.map(user => user.name).join(", ")}` : "No users have this role yet."}</p>}
+    {internal ? <div className="mt-4 overflow-hidden rounded-xl border border-border">
+      {groups.map(group => <div key={group}>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface px-3 py-2 first:border-t-0">
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">{group}</span>
+          {!readOnly && !locked && <span className="flex items-center gap-1 text-xs text-muted">Set all:{levels.map(level => <button key={level} type="button" className="rounded px-1.5 py-0.5 font-medium text-emerald hover:bg-emerald/10" onClick={() => setGroup(group, level)}>{levelLabel[level]}</button>)}</span>}
         </div>
-        {permissionModules.filter(module => module.group === group).map(module => <div className="matrix-row" key={module.key}>
-          <span className="matrix-module">{module.label}{module.hint && <small>{module.hint}</small>}</span>
-          <LevelPicker value={permissions[module.key] ?? "none"} onChange={level => setLevel(module.key, level)} disabled={readOnly || locked} label={`${module.label} access`} />
-        </div>)}
+        {permissionModules.filter(module => module.group === group).map(module => (
+          <div key={module.key} className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-3 py-2">
+            <span className="text-sm">{module.label}{module.hint && <small className="block text-xs text-muted">{module.hint}</small>}</span>
+            <LevelPicker value={permissions[module.key] ?? "none"} onChange={level => setLevel(module.key, level)} disabled={readOnly || locked} label={`${module.label} access`} />
+          </div>
+        ))}
       </div>)}
-    </div> : <div className="inline-alert" style={{ margin: "0 20px 20px" }}><ShieldCheck /><span>{kindLabel[draft.kind]} roles open their own portal only, so there is no permission matrix.</span></div>}
+    </div> : <InlineAlert className="mt-4">{kindLabel[draft.kind]} roles open their own portal only, so there's no permission matrix.</InlineAlert>}
   </Panel>;
 }

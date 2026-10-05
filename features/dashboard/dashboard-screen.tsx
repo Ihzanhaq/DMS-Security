@@ -1,77 +1,80 @@
-import {
-  Buildings, CalendarCheck, CheckCircle, ClockCountdown, MapPin,
-  UsersThree, Wallet, WarningCircle,
-} from "@phosphor-icons/react";
-import { Panel, StatStrip, Status } from "@/components/shared/screen-elements";
+"use client";
+
+import { AlertTriangle, ArrowRight, Building2, CalendarCheck, CheckCircle2, Clock, MapPin, Users, Wallet } from "lucide-react";
+import { Button, DataTable, IconTile, ListRow, PageHeader, Panel, PersonCell, ProgressBar, SplitLayout, StatStrip, StatusChip } from "@/components/ui-kit";
+import { APP_TODAY } from "@/lib/app-date";
 
 const coverage = [
   ["Thiruvananthapuram", 94, 128], ["Kollam", 89, 76], ["Ernakulam", 97, 104],
   ["Alappuzha", 91, 58], ["Kottayam", 86, 42],
 ] as const;
 
+const movements = [
+  { name: "Suresh Babu", id: "BMG-1840", site: "Lulu Mall, Kochi", shift: "Day · 08:00", state: "On site" },
+  { name: "Fathima N", id: "BMG-2274", site: "Aster Medcity", shift: "Day · 09:00", state: "Late" },
+  { name: "Rajeev Kumar", id: "BMG-1988", site: "TCS Technopark", shift: "Night · 20:00", state: "Scheduled" },
+];
+
+const todayLabel = new Date(`${APP_TODAY}T12:00:00`).toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
 export function DashboardScreen({ onNavigate }: { onNavigate: (view: string) => void }) {
   return <>
-    <header className="dashboard-welcome" data-enter>
-      <div><p>Thursday, 10 September 2026 · 09:24 IST</p><h1>Operations overview</h1></div>
-      <div className="live-status"><i /> 421 on duty <span>Updated 2 min ago</span></div>
-    </header>
+    <PageHeader title="Operations overview" subtitle={`${todayLabel} · 421 guards on duty · updated 2 minutes ago`}
+      actions={<Button variant="outline" onClick={() => onNavigate("action-centre")}><AlertTriangle />Needs attention · 3</Button>} />
     <StatStrip items={[
-      { icon:UsersThree, value:"468", label:"Active personnel", note:"12 joined this month", tone:"blue" },
-      { icon:Buildings, value:"214", label:"Client sites", note:"201 fully staffed", tone:"violet" },
-      { icon:CalendarCheck, value:"93.8%", label:"On-time today", note:"421 of 449 punches", tone:"green" },
-      { icon:WarningCircle, value:"7", label:"Open vacancies", note:"3 need action now", tone:"orange" },
+      { icon: Users, value: "468", label: "Active employees", note: "12 joined this month" },
+      { icon: Building2, value: "214", label: "Client sites", note: "201 fully staffed" },
+      { icon: CalendarCheck, value: "93.8%", label: "On time today", note: "421 of 449 punches", tone: "green" },
+      { icon: AlertTriangle, value: "7", label: "Open vacancies", note: "3 need action now", tone: "orange" },
     ]} />
-    <div className="content-grid">
-      <Panel title="District coverage" description="Today’s staffed posts by district" action={<button className="text-button" onClick={()=>onNavigate("deployment")}>View deployment</button>}>
-        <div className="coverage-chart">
-          {coverage.map(([name,value,posts])=><div className="coverage-row" key={name}>
-            <span>{name}<small>{posts} posts</small></span>
-            <div className="track"><i style={{width:value + "%"}} /></div><strong>{value}%</strong>
-          </div>)}
+    <SplitLayout wideFirst>
+      <Panel title="Coverage by district" description="Posts staffed today." action={<Button variant="link" size="sm" className="h-auto px-0" onClick={() => onNavigate("deployment")}>View deployment<ArrowRight /></Button>}>
+        <div className="grid gap-4">
+          {coverage.map(([name, value, posts]) => (
+            <div key={name} className="grid grid-cols-[130px_1fr_44px] items-center gap-3 text-sm">
+              <span><span className="block">{name}</span><small className="text-xs text-muted">{posts} posts</small></span>
+              <ProgressBar value={value} tone={value < 90 ? "warn" : "emerald"} />
+              <strong className="text-right tabular-nums">{value}%</strong>
+            </div>
+          ))}
         </div>
-        <div className="coverage-summary">
-          <span><i className="dot filled" />Staffed <strong>408</strong></span>
-          <span><i className="dot open" />Vacant <strong>27</strong></span>
-          <span className="summary-end">Overall <strong>93.8%</strong></span>
-        </div>
-      </Panel>
-      <Panel title="Needs attention" description="Prioritized for this morning" action={<button className="more-button" onClick={()=>onNavigate("action-centre")} aria-label="Open action centre">•••</button>} className="attention-panel">
-        <Action icon={MapPin} tone="red" title="3 posts still vacant" meta="Technopark and 2 other sites" time="Now" />
-        <Action icon={ClockCountdown} tone="orange" title="7 late check-ins" meta="Past the site grace period" time="09:18" />
-        <Action icon={Wallet} tone="blue" title="Payroll has 3 exceptions" meta="August 2026 run" time="Review" />
-        <button className="full-button" onClick={()=>onNavigate("action-centre")}>Open action centre</button>
-      </Panel>
-    </div>
-    <div className="lower-grid">
-      <Panel title="Today’s shift movement" description="Live deployment changes" action={<button className="text-button" onClick={()=>onNavigate("attendance")}>All activity</button>}>
-        <div className="activity-table">
-          <div className="table-head"><span>Employee</span><span>Site</span><span>Shift</span><span>Status</span></div>
-          <Movement name="Suresh Babu" id="BMG-1840" site="Lulu Mall, Kochi" shift="Day · 08:00" state="On site" />
-          <Movement name="Fathima N" id="BMG-2274" site="Aster Medcity" shift="Day · 09:00" state="Late" late />
-          <Movement name="Rajeev Kumar" id="BMG-1988" site="TCS Technopark" shift="Night · 20:00" state="Scheduled" />
+        <div className="mt-4 flex flex-wrap gap-4 border-t border-border pt-3 text-xs text-muted">
+          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-emerald" />Staffed <strong className="text-foreground">408</strong></span>
+          <span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-full border border-muted" />Vacant <strong className="text-foreground">27</strong></span>
+          <span className="ml-auto">Overall <strong className="text-foreground">93.8%</strong></span>
         </div>
       </Panel>
-      <Panel title="August payroll" description="Preparation closes in 3 days" className="payroll-card">
-        <div className="payroll-progress"><div><strong>82%</strong><span>Ready</span></div></div>
-        <div className="payroll-steps">
-          <span><CheckCircle weight="fill" /> Attendance locked</span>
-          <span><CheckCircle weight="fill" /> Deductions reviewed</span>
-          <span className="pending"><ClockCountdown /> 3 exceptions open</span>
-        </div>
-        <button className="full-button strong" onClick={()=>onNavigate("payroll")}>Continue payroll</button>
+      <Panel title="Needs attention" description="Most urgent first.">
+        <ListRow><IconTile icon={MapPin} tone="danger" /><div className="min-w-0 flex-1"><strong className="block text-sm">3 posts still vacant</strong><small className="text-xs text-muted">Technopark and 2 other sites</small></div><span className="text-xs text-muted">Now</span></ListRow>
+        <ListRow><IconTile icon={Clock} tone="warn" /><div className="min-w-0 flex-1"><strong className="block text-sm">7 late check-ins</strong><small className="text-xs text-muted">After the site grace period</small></div><span className="text-xs text-muted">09:18</span></ListRow>
+        <ListRow><IconTile icon={Wallet} tone="navy" /><div className="min-w-0 flex-1"><strong className="block text-sm">Payroll has 3 exceptions</strong><small className="text-xs text-muted">August 2026 run</small></div><span className="text-xs text-muted">Today</span></ListRow>
+        <Button variant="outline" className="mt-3 w-full" onClick={() => onNavigate("action-centre")}>Open action centre</Button>
       </Panel>
-    </div>
+    </SplitLayout>
+    <SplitLayout wideFirst>
+      <Panel title="Today's shift movement" description="Live deployment changes." flush action={<Button variant="link" size="sm" className="h-auto px-0" onClick={() => onNavigate("attendance")}>View attendance<ArrowRight /></Button>}>
+        <DataTable rows={movements} rowKey={row => row.id} columns={[
+          { header: "Employee", cell: row => <PersonCell name={row.name} id={row.id} /> },
+          { header: "Site", cell: row => row.site },
+          { header: "Shift", cell: row => row.shift },
+          { header: "Status", cell: row => <StatusChip tone={row.state === "Late" ? "warning" : row.state === "Scheduled" ? "neutral" : "success"}>{row.state}</StatusChip> },
+        ]} />
+      </Panel>
+      <Panel title="August payroll" description="Closes in 3 days.">
+        <div className="mb-4 flex items-center gap-4">
+          <div className="relative h-24 w-24 shrink-0 rounded-full" style={{ background: "conic-gradient(#00be73 0 82%, hsl(var(--surface)) 82% 100%)" }}>
+            <div className="absolute inset-2.5 flex flex-col items-center justify-center rounded-full bg-card">
+              <strong className="text-xl font-bold tabular-nums">82%</strong><span className="text-[10px] text-muted">ready</span>
+            </div>
+          </div>
+          <ul className="grid gap-1.5 text-sm">
+            <li className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald" />Attendance locked</li>
+            <li className="flex items-center gap-1.5"><CheckCircle2 className="h-4 w-4 text-emerald" />Deductions reviewed</li>
+            <li className="flex items-center gap-1.5 text-status-warn"><Clock className="h-4 w-4" />3 exceptions open</li>
+          </ul>
+        </div>
+        <Button className="w-full" onClick={() => onNavigate("payroll")}>Continue payroll<ArrowRight /></Button>
+      </Panel>
+    </SplitLayout>
   </>;
-}
-
-function Action({ icon: Icon, tone, title, meta, time }: { icon: typeof MapPin; tone: string; title: string; meta: string; time: string }) {
-  return <div className="action-row"><span className={"action-icon " + tone}><Icon size={18} /></span><div><strong>{title}</strong><small>{meta}</small></div><b>{time}</b></div>;
-}
-
-function Movement({ name, id, site, shift, state, late=false }: { name:string; id:string; site:string; shift:string; state:string; late?:boolean }) {
-  const initials=name.split(" ").map(part=>part[0]).join("").slice(0,2);
-  return <div className="person-row">
-    <span className="person"><i>{initials}</i><span><strong>{name}</strong><small>{id}</small></span></span>
-    <span>{site}</span><span>{shift}</span><Status tone={late ? "warning" : state === "Scheduled" ? "neutral" : "success"}>{state}</Status>
-  </div>;
 }

@@ -1,32 +1,40 @@
 "use client";
 
 import { useState } from "react";
-import { ChatCircleText, CheckCircle, ClockCountdown, Plus, WarningCircle } from "@phosphor-icons/react";
+import { AlertTriangle, CheckCircle2, Clock, MessageSquare, Plus } from "lucide-react";
 import { employees, tickets as ticketSeed } from "@/lib/mock-data";
 import {
-  DetailDrawer, PageHeader, Panel, PersonCell, StatStrip, Status, Timeline, Toolbar,
-} from "@/components/shared/screen-elements";
+  Button, DataTable, DetailDrawer, EmptyState, Field, FilterChips, FormStack, Input, ListFilterRow, PageHeader,
+  Panel, PersonCell, SearchBar, Section, Select, StatStrip, StatusChip, Textarea, Timeline, type StatusTone,
+} from "@/components/ui-kit";
 import { useToast } from "@/components/shared/toast-context";
+import { APP_TODAY, formatAppDate } from "@/lib/app-date";
+import { NAV } from "@/lib/labels";
 import type { Ticket, TicketCategory } from "@/types/domain";
 
-const TODAY = "2026-09-22";
 const categoryLabels: Record<TicketCategory, string> = {
   salary: "Salary", attendance: "Attendance", uniform: "Uniform", "site-issue": "Site issue", other: "Other",
 };
+const statusLabels: Record<Ticket["status"], string> = { open: "Open", "in-progress": "In progress", resolved: "Resolved" };
+const statusTone = (status: Ticket["status"]): StatusTone => status === "resolved" ? "success" : status === "in-progress" ? "info" : "warning";
+type CategoryFilter = "all" | TicketCategory;
 
-export function TicketsScreen() {
+export function TicketsScreen({ startCreating = false }: { startCreating?: boolean }) {
   const notify = useToast();
   const [rows, setRows] = useState<Ticket[]>(ticketSeed);
-  const [filter, setFilter] = useState("All categories");
+  const [filter, setFilter] = useState<CategoryFilter>("all");
+  const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Ticket | null>(null);
   const [reply, setReply] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(startCreating);
   const [newSubject, setNewSubject] = useState("");
   const [newDetail, setNewDetail] = useState("");
   const [newCategory, setNewCategory] = useState<TicketCategory>("other");
 
-  const visible = rows.filter(ticket => filter === "All categories" || categoryLabels[ticket.category] === filter);
   const employeeOf = (id: string) => employees.find(item => item.id === id);
+  const q = query.trim().toLowerCase();
+  const visible = rows.filter(ticket => (filter === "all" || ticket.category === filter)
+    && (!q || [ticket.id, ticket.subject, ticket.assignee, employeeOf(ticket.raisedBy)?.name ?? ticket.raisedBy].some(value => value.toLowerCase().includes(q))));
   const current = open ? rows.find(ticket => ticket.id === open.id) ?? open : null;
 
   const patch = (id: string, changes: Partial<Ticket>) =>
@@ -34,9 +42,9 @@ export function TicketsScreen() {
 
   const sendReply = () => {
     if (!current || !reply.trim()) return;
-    patch(current.id, { trail: [...current.trail.map(entry => ({ ...entry, state: "done" as const })), { title: reply.trim(), time: `${TODAY} · now`, state: "active" as const }], status: current.status === "open" ? "in-progress" : current.status });
+    patch(current.id, { trail: [...current.trail.map(entry => ({ ...entry, state: "done" as const })), { title: reply.trim(), time: `${formatAppDate(APP_TODAY)} · now`, state: "active" as const }], status: current.status === "open" ? "in-progress" : current.status });
     setReply("");
-    notify("Reply added to the ticket trail");
+    notify("Reply added");
   };
 
   const createTicket = () => {
@@ -44,8 +52,8 @@ export function TicketsScreen() {
     const ticket: Ticket = {
       id: `TKT-${1044 + rows.length}`, raisedBy: "Office desk", raisedByRole: "HR",
       category: newCategory, subject: newSubject.trim(), detail: newDetail.trim(),
-      status: "open", createdOn: TODAY, sla: "2026-09-25", assignee: "Meera Nair",
-      trail: [{ title: "Logged manually", time: `${TODAY} · now`, state: "active" }],
+      status: "open", createdOn: APP_TODAY, sla: "2026-09-25", assignee: "Meera Nair",
+      trail: [{ title: "Logged by the office", time: `${formatAppDate(APP_TODAY)} · now`, state: "active" }],
     };
     setRows(rowsNow => [ticket, ...rowsNow]);
     setCreating(false); setNewSubject(""); setNewDetail("");
@@ -53,74 +61,63 @@ export function TicketsScreen() {
   };
 
   return <>
-    <PageHeader title="Tickets" description="Open ticketing for guards, clients and staff — salary doubts, uniform issues and anything else."
-      actions={<button className="primary-button" onClick={() => setCreating(true)}><Plus/>New ticket</button>}/>
+    <PageHeader title={NAV.tickets} subtitle="Questions from guards, clients and staff — salary, uniform, attendance and anything else."
+      actions={<Button onClick={() => setCreating(true)}><Plus />New ticket</Button>} />
     <StatStrip items={[
-      { icon: ChatCircleText, value: String(rows.filter(ticket => ticket.status === "open").length), label: "Open", note: "Awaiting first response", tone: "orange" },
-      { icon: ClockCountdown, value: String(rows.filter(ticket => ticket.status === "in-progress").length), label: "In progress", note: "Being worked", tone: "violet" },
-      { icon: CheckCircle, value: String(rows.filter(ticket => ticket.status === "resolved").length), label: "Resolved", note: "This month", tone: "green" },
-      { icon: WarningCircle, value: String(rows.filter(ticket => ticket.status !== "resolved" && ticket.sla < TODAY).length), label: "SLA breached", note: "Past response date", tone: "red" },
-    ]}/>
-    <Toolbar>
-      <select value={filter} onChange={event => setFilter(event.target.value)} aria-label="Category filter">
-        <option>All categories</option>{Object.values(categoryLabels).map(label => <option key={label}>{label}</option>)}
-      </select>
-      <button className="secondary-button" onClick={() => setFilter("All categories")}>Reset</button>
-      <span className="toolbar-count">{visible.length} tickets</span>
-    </Toolbar>
-    <Panel className="table-panel"><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Ticket</th><th>Raised by</th><th>Category</th><th>Subject</th><th>SLA</th><th>Assignee</th><th>Status</th></tr></thead><tbody>
-      {visible.map(ticket => {
-        const employee = employeeOf(ticket.raisedBy);
-        return <tr key={ticket.id} tabIndex={0} onClick={() => setOpen(ticket)} onKeyDown={event => { if (event.key === "Enter") setOpen(ticket); }}>
-          <td><strong>{ticket.id}</strong></td>
-          <td>{employee ? <PersonCell name={employee.name} id={employee.id} phone={employee.phone}/> : ticket.raisedBy}</td>
-          <td><Status tone={ticket.category === "salary" ? "info" : "neutral"}>{categoryLabels[ticket.category]}</Status></td>
-          <td className="wrap-cell">{ticket.subject}</td>
-          <td>{ticket.sla}</td><td>{ticket.assignee}</td>
-          <td><Status tone={ticket.status === "resolved" ? "success" : ticket.status === "in-progress" ? "info" : "warning"}>{ticket.status}</Status></td>
-        </tr>;
-      })}
-    </tbody></table></div></Panel>
+      { icon: MessageSquare, value: String(rows.filter(ticket => ticket.status === "open").length), label: "Open", note: "Waiting for a first reply", tone: "orange" },
+      { icon: Clock, value: String(rows.filter(ticket => ticket.status === "in-progress").length), label: "In progress", note: "Being worked on" },
+      { icon: CheckCircle2, value: String(rows.filter(ticket => ticket.status === "resolved").length), label: "Resolved", note: "This month", tone: "green" },
+      { icon: AlertTriangle, value: String(rows.filter(ticket => ticket.status !== "resolved" && ticket.sla < APP_TODAY).length), label: "Overdue", note: "Past the reply deadline", tone: "red" },
+    ]} />
+    <SearchBar value={query} onChange={setQuery} placeholder="Search by ID, subject, person or assignee" />
+    <ListFilterRow>
+      <FilterChips<CategoryFilter> options={[{ id: "all", label: "All" }, ...(Object.keys(categoryLabels) as TicketCategory[]).map(key => ({ id: key, label: categoryLabels[key] }))]} value={filter} onChange={setFilter} />
+      <span className="text-xs text-muted">{visible.length} of {rows.length} tickets</span>
+    </ListFilterRow>
+    <Panel flush>
+      <DataTable rows={visible} rowKey={row => row.id} onRowClick={setOpen}
+        empty={<div className="p-4"><EmptyState icon={MessageSquare} message={rows.length ? "No tickets match these filters." : "No tickets yet."} actionLabel={rows.length ? "Clear filters" : "New ticket"} onAction={rows.length ? () => { setFilter("all"); setQuery(""); } : () => setCreating(true)} /></div>}
+        columns={[
+          { header: "Ticket", cell: row => <span><strong className="block text-sm">{row.subject}</strong><small className="text-xs text-muted">{row.id}</small></span> },
+          { header: "Raised by", cell: row => { const employee = employeeOf(row.raisedBy); return employee ? <PersonCell name={employee.name} id={employee.id} phone={employee.phone} /> : row.raisedBy; } },
+          { header: "Category", cell: row => <StatusChip tone={row.category === "salary" ? "info" : "neutral"}>{categoryLabels[row.category]}</StatusChip>, hideOnMobile: true },
+          { header: "Reply by", cell: row => <span className={row.status !== "resolved" && row.sla < APP_TODAY ? "font-semibold text-status-danger" : ""}>{formatAppDate(row.sla)}</span> },
+          { header: "Assignee", cell: row => row.assignee, hideOnMobile: true },
+          { header: "Status", cell: row => <StatusChip tone={statusTone(row.status)}>{statusLabels[row.status]}</StatusChip> },
+        ]} />
+    </Panel>
 
-    {current && <DetailDrawer title={current.id} subtitle={`${categoryLabels[current.category]} · raised by ${employeeOf(current.raisedBy)?.name ?? current.raisedBy}`} onClose={() => setOpen(null)}
+    {current && <DetailDrawer title={current.subject} subtitle={`${current.id} · ${categoryLabels[current.category]} · raised by ${employeeOf(current.raisedBy)?.name ?? current.raisedBy}`} onClose={() => setOpen(null)}
       footer={<>
-        <button className="secondary-button" onClick={() => setOpen(null)}>Close</button>
-        <button className="primary-button" disabled={current.status === "resolved"} onClick={() => { patch(current.id, { status: "resolved" }); notify(`${current.id} resolved`); setOpen(null); }}><CheckCircle/>Resolve ticket</button>
+        <Button variant="outline" onClick={() => setOpen(null)}>Close</Button>
+        <Button disabled={current.status === "resolved"} onClick={() => { patch(current.id, { status: "resolved" }); notify(`${current.id} resolved`); setOpen(null); }}><CheckCircle2 />{current.status === "resolved" ? "Resolved" : "Mark resolved"}</Button>
       </>}>
-      <div className="drawer-section">
-        <h3>{current.subject}</h3>
-        <p style={{ margin: "0 0 14px", fontSize: "var(--fs-sm)", lineHeight: 1.55 }}>{current.detail}</p>
-        <div className="form-stack" style={{ padding: 0 }}>
-          <label><span>Status</span><select value={current.status} onChange={event => patch(current.id, { status: event.target.value as Ticket["status"] })}><option value="open">Open</option><option value="in-progress">In progress</option><option value="resolved">Resolved</option></select></label>
-          <label><span>Assignee</span><select value={current.assignee} onChange={event => patch(current.id, { assignee: event.target.value })}><option>Meera Nair</option><option>Store desk</option><option>Nithin Joseph</option><option>Divya Menon</option></select></label>
-        </div>
-      </div>
-      <div className="drawer-section">
-        <h3>Trail</h3>
-        <Timeline entries={current.trail}/>
-      </div>
-      <div className="drawer-section">
-        <h3>Reply</h3>
-        <div className="form-stack" style={{ padding: 0 }}>
-          <label><span>Add to trail</span><textarea rows={3} value={reply} onChange={event => setReply(event.target.value)} placeholder="What was checked, decided or communicated?"/></label>
-          <button className="secondary-button" onClick={sendReply}>Add reply</button>
-        </div>
-      </div>
+      {current.detail && <Section title="Request"><p className="text-sm leading-relaxed">{current.detail}</p></Section>}
+      <Section title="Handling">
+        <FormStack>
+          <Field label="Status"><Select value={current.status} onChange={event => patch(current.id, { status: event.target.value as Ticket["status"] })}>{(Object.keys(statusLabels) as Ticket["status"][]).map(key => <option key={key} value={key}>{statusLabels[key]}</option>)}</Select></Field>
+          <Field label="Assigned to"><Select value={current.assignee} onChange={event => patch(current.id, { assignee: event.target.value })}><option>Meera Nair</option><option>Store desk</option><option>Nithin Joseph</option><option>Divya Menon</option></Select></Field>
+        </FormStack>
+      </Section>
+      <Section title="History"><Timeline entries={current.trail} /></Section>
+      <Section title="Reply">
+        <FormStack>
+          <Textarea rows={3} value={reply} onChange={event => setReply(event.target.value)} placeholder="What was checked, decided or told to the person" aria-label="Reply" />
+          <Button variant="outline" disabled={!reply.trim()} onClick={sendReply}>Add reply</Button>
+        </FormStack>
+      </Section>
     </DetailDrawer>}
 
-    {creating && <DetailDrawer title="New ticket" subtitle="Logged on behalf of a caller or walk-in" onClose={() => setCreating(false)}
+    {creating && <DetailDrawer title="New ticket" subtitle="Log a question on behalf of a caller or walk-in" onClose={() => setCreating(false)}
       footer={<>
-        <button className="secondary-button" onClick={() => setCreating(false)}>Cancel</button>
-        <button className="primary-button" onClick={createTicket}><Plus/>Create ticket</button>
+        <Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button>
+        <Button disabled={!newSubject.trim()} onClick={createTicket}><Plus />Create ticket</Button>
       </>}>
-      <div className="drawer-section">
-        <h3>Details</h3>
-        <div className="form-stack" style={{ padding: 0 }}>
-          <label><span>Category</span><select value={newCategory} onChange={event => setNewCategory(event.target.value as TicketCategory)}>{(Object.keys(categoryLabels) as TicketCategory[]).map(key => <option key={key} value={key}>{categoryLabels[key]}</option>)}</select></label>
-          <label><span>Subject</span><input value={newSubject} onChange={event => setNewSubject(event.target.value)} placeholder="One-line summary"/></label>
-          <label><span>Detail</span><textarea rows={4} value={newDetail} onChange={event => setNewDetail(event.target.value)} placeholder="What happened, who reported it, what is expected"/></label>
-        </div>
-      </div>
+      <FormStack>
+        <Field label="Category"><Select value={newCategory} onChange={event => setNewCategory(event.target.value as TicketCategory)}>{(Object.keys(categoryLabels) as TicketCategory[]).map(key => <option key={key} value={key}>{categoryLabels[key]}</option>)}</Select></Field>
+        <Field label="Subject" required><Input value={newSubject} onChange={event => setNewSubject(event.target.value)} placeholder="One-line summary" /></Field>
+        <Field label="Details"><Textarea rows={4} value={newDetail} onChange={event => setNewDetail(event.target.value)} placeholder="What happened, who reported it, what they expect" /></Field>
+      </FormStack>
     </DetailDrawer>}
   </>;
 }
