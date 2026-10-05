@@ -123,10 +123,22 @@ export const internalModules: NavModule[] = [
 
 export const guardMobileNav = [
   { label: "Home", view: "guard-home" as AppView, icon: LayoutDashboard },
-  { label: "Punch", view: "guard-punch" as AppView, icon: MapPin },
+  { label: "Punch in", view: "guard-punch" as AppView, icon: MapPin },
   { label: "Schedule", view: "guard-schedule" as AppView, icon: CalendarCheck },
   { label: "Help", view: "guard-help" as AppView, icon: MessageSquare },
-  { label: "More", view: "guard-profile" as AppView, icon: UserRound },
+];
+
+export const internalMobileNav = [
+  { label: "Dashboard", view: "dashboard" as AppView, icon: LayoutDashboard },
+  { label: "Employees", view: "workforce" as AppView, icon: Users },
+  { label: "Attendance", view: "attendance" as AppView, icon: CalendarCheck },
+  { label: "Payroll", view: "payroll" as AppView, icon: Wallet },
+];
+
+export const clientMobileNav = [
+  { label: "Overview", view: "client-home" as AppView, icon: LayoutDashboard },
+  { label: "Sites", view: "client-sites" as AppView, icon: Building2 },
+  { label: "Complaints", view: "client-complaints" as AppView, icon: AlertTriangle },
 ];
 
 export const guardModule: NavModule = {

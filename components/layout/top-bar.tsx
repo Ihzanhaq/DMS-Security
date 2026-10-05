@@ -1,6 +1,7 @@
 "use client";
 
-import { Bell, Moon, Plus, Sun } from "lucide-react";
+import { Bell, Moon, Plus, Search, Shield, Sun } from "lucide-react";
+import { APP_NAME } from "@/lib/labels";
 import { Button } from "@/components/ui-kit";
 import { SearchTrigger } from "./global-search";
 import { UserMenu } from "./user-menu";
@@ -22,7 +23,9 @@ export function TopBar({
   onViewAs,
   onSignOut,
   showCreate,
+  showSearch,
 }: {
+  showSearch: boolean;
   dark: boolean;
   onToggleTheme: () => void;
   onOpenSearch: () => void;
@@ -40,8 +43,18 @@ export function TopBar({
 }) {
   return (
     <header className="sticky top-0 z-20 mx-3 my-2 flex h-14 items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 shadow-sm backdrop-blur md:mx-5 lg:mx-6">
-      <SearchTrigger onClick={onOpenSearch} />
       <div className="flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-navy md:hidden" aria-label={APP_NAME}>
+          <Shield className="h-4 w-4 text-emerald" />
+        </span>
+        {showSearch ? <SearchTrigger onClick={onOpenSearch} /> : <span className="hidden text-sm font-semibold md:inline">{APP_NAME}</span>}
+      </div>
+      <div className="flex items-center gap-1 sm:gap-2">
+        {showSearch && (
+          <Button variant="ghost" size="icon" className="md:hidden" onClick={onOpenSearch} aria-label="Search">
+            <Search className="h-5 w-5" />
+          </Button>
+        )}
         <Button variant="ghost" size="icon" onClick={onToggleTheme} aria-label="Toggle theme">
           {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </Button>

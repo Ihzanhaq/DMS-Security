@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Shield } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NavModule } from "@/lib/nav-config";
 import type { AppView } from "@/types/domain";
@@ -64,9 +64,10 @@ export function Sidebar({
             type="button"
             onClick={onAttention}
             className="relative mb-2 flex h-9 w-14 items-center justify-center rounded-xl text-white/70 hover:bg-white/10"
-            title="Need attention"
+            title="Needs attention"
+            aria-label={`Needs attention: ${attentionCount}`}
           >
-            <span className="text-lg font-bold">!</span>
+            <AlertTriangle className="h-5 w-5" />
             {attentionCount > 0 && (
               <span className="absolute right-2 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-status-danger px-1 text-[9px] font-bold">
                 {attentionCount > 9 ? "9+" : attentionCount}

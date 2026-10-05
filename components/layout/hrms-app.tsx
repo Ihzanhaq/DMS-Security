@@ -26,7 +26,7 @@ import { complaints, dutyChangeRequests, guardChanges, satisfactionCalls, spareD
 import { deriveNotifications } from "@/lib/notifications";
 import { effectivePermissions, landingView, type AccessRole } from "@/lib/access";
 import { APP_TODAY } from "@/lib/app-date";
-import { clientModule, guardMobileNav, guardModule, internalModules, type NavModule } from "@/lib/nav-config";
+import { clientMobileNav, clientModule, guardMobileNav, guardModule, internalMobileNav, internalModules, type NavModule } from "@/lib/nav-config";
 import type { AppNotification, AppView } from "@/types/domain";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./top-bar";
@@ -228,43 +228,46 @@ function HrmsShell() {
   }
 
   const showInternalShell = portal === "internal";
-  const showGuardMobile = portal === "guard";
+  const mobileNavItems = portal === "guard" ? guardMobileNav : portal === "client" ? clientMobileNav : internalMobileNav.filter(item => canOpen(item.view));
+  const moreItems = navModules.flatMap(mod => mod.items);
+  const attention = portal === "internal"
+    ? { count: notifications.length, view: "action-centre" as AppView }
+    : portal === "guard"
+      ? { count: 1, view: "guard-vigilance" as AppView }
+      : { count: complaints.filter(c => c.state !== "Resolved").length, view: "client-complaints" as AppView };
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface">
-      {showInternalShell && (
-        <Sidebar
-          modules={navModules}
-          activeView={view}
-          activeModuleId={activeModuleId}
-          onSelectModule={setActiveModuleId}
-          onNavigate={navigate}
-          attentionCount={notifications.length}
-          onAttention={() => navigate("action-centre")}
-        />
-      )}
+      <Sidebar
+        modules={navModules}
+        activeView={view}
+        activeModuleId={activeModuleId}
+        onSelectModule={setActiveModuleId}
+        onNavigate={navigate}
+        attentionCount={attention.count}
+        onAttention={() => navigate(attention.view)}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {(showInternalShell || portal === "client") && (
-          <TopBar
-            dark={dark}
-            onToggleTheme={toggleTheme}
-            onOpenSearch={() => setSearchOpen(true)}
-            notifications={notifications}
-            notificationsOpen={notificationsOpen}
-            onToggleNotifications={() => setNotificationsOpen(o => !o)}
-            onNotificationClick={(_, targetView) => navigate(targetView)}
-            onCreateOpen={() => setCreateOpen(true)}
-            showCreate={showInternalShell}
-            users={users}
-            roles={roles}
-            currentUserId={currentUser.id}
-            onViewAs={switchUser}
-            onSignOut={() => setSignedOut(true)}
-          />
-        )}
+        <TopBar
+          dark={dark}
+          onToggleTheme={toggleTheme}
+          onOpenSearch={() => setSearchOpen(true)}
+          showSearch={showInternalShell}
+          notifications={notifications}
+          notificationsOpen={notificationsOpen}
+          onToggleNotifications={() => setNotificationsOpen(o => !o)}
+          onNotificationClick={(_, targetView) => navigate(targetView)}
+          onCreateOpen={() => setCreateOpen(true)}
+          showCreate={showInternalShell}
+          users={users}
+          roles={roles}
+          currentUserId={currentUser.id}
+          onViewAs={switchUser}
+          onSignOut={() => setSignedOut(true)}
+        />
 
-        <main className={`relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden ${showGuardMobile ? "pb-20" : "pb-24 md:pb-8"}`}>
+        <main className="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden pb-24 md:pb-8">
           <div className="p-3 md:px-5 md:py-5 lg:px-6" ref={contentRef} onClickCapture={blockReadOnlyActions}>
             {readOnly && (
               <div className="mb-4 flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-3 text-sm" data-enter>
@@ -287,7 +290,7 @@ function HrmsShell() {
         </main>
       </div>
 
-      {showGuardMobile && <BottomNav items={guardMobileNav} activeView={view} onNavigate={navigate} />}
+      <BottomNav items={mobileNavItems} moreItems={moreItems} activeView={view} onNavigate={navigate} />
       {showInternalShell && (
         <FAB icon={Plus} label="Create" onClick={() => setCreateOpen(true)} className="md:hidden" />
       )}
