@@ -234,9 +234,11 @@ function buildReport(report: string, filters: Filters): ReportSpec {
 
 const identityColumns = (columnsSpec: { label: string }[]): ExportColumn[] => columnsSpec.map(column => ({ source: column.label, header: column.label, include: true }));
 const formatCell = (column: ReportColumn, cell: string | number) => column.currency && typeof cell === "number" ? rupees(cell) : cell;
-const sumColumns = (spec: ReportSpec, rows: (string | number)[][]) => spec.columns.map((column, index) => column.numeric
-  ? rows.reduce((sum, row) => sum + (typeof row[index] === "number" ? row[index] as number : 0), 0)
-  : null);
+const sumColumns = (spec: ReportSpec, rows: (string | number)[][]) => spec.columns.map((column, index) => {
+  if (!column.numeric) return null;
+  const total = rows.reduce((sum, row) => sum + (Number(row[index]) || 0), 0);
+  return Math.round(total * 100) / 100;
+});
 
 export function ReportsScreen() {
   const notify = useToast();

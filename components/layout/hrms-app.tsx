@@ -26,7 +26,7 @@ import { complaints, dutyChangeRequests, guardChanges, satisfactionCalls, spareD
 import { deriveNotifications } from "@/lib/notifications";
 import { effectivePermissions, landingView, type AccessRole } from "@/lib/access";
 import { APP_TODAY } from "@/lib/app-date";
-import { clientMobileNav, clientModule, guardMobileNav, guardModule, internalMobileNav, internalModules, type NavModule } from "@/lib/nav-config";
+import { clientMobileNav, clientModule, guardMobileNav, guardModule, internalMobileNav, internalModules, parentView, type NavModule } from "@/lib/nav-config";
 import type { AppNotification, AppView } from "@/types/domain";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./top-bar";
@@ -117,7 +117,8 @@ function HrmsShell() {
     })).filter(mod => mod.items.length);
   }, [portal, canOpen]);
 
-  const activeModuleId = browsedModuleId ?? navModules.find(mod => mod.items.some(item => item.view === view))?.id ?? navModules[0]?.id ?? "";
+  const navView = parentView[view] ?? view;
+  const activeModuleId = browsedModuleId ?? navModules.find(mod => mod.items.some(item => item.view === navView))?.id ?? navModules[0]?.id ?? "";
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -243,7 +244,7 @@ function HrmsShell() {
     <div className="flex h-screen overflow-hidden bg-surface">
       <Sidebar
         modules={navModules}
-        activeView={view}
+        activeView={navView}
         activeModuleId={activeModuleId}
         onSelectModule={setBrowsedModuleId}
         onNavigate={navigate}
@@ -296,7 +297,7 @@ function HrmsShell() {
         </main>
       </div>
 
-      <BottomNav items={mobileNavItems} moreItems={moreItems} activeView={view} onNavigate={navigate} />
+      <BottomNav items={mobileNavItems} moreItems={moreItems} activeView={navView} onNavigate={navigate} />
       {showInternalShell && (
         <FAB icon={Plus} label="Create" onClick={() => setCreateOpen(true)} className="md:hidden" />
       )}

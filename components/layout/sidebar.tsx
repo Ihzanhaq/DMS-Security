@@ -33,7 +33,7 @@ export function Sidebar({
   if (!activeModule) return null;
 
   return (
-    <aside className="hidden p-2 md:flex" aria-label="Main navigation">
+    <aside className="hidden p-2 md:flex" aria-label="Sidebar">
       <div className="flex">
         <div className="flex w-[72px] flex-col items-center rounded-3xl bg-navy py-2 text-white">
           <div className="flex h-14 w-full items-center justify-center">
@@ -41,7 +41,7 @@ export function Sidebar({
               <Shield className="h-5 w-5 text-emerald" />
             </span>
           </div>
-          <nav className="flex flex-1 flex-col gap-1 px-1">
+          <nav className="flex flex-1 flex-col gap-1 px-1" aria-label="Sections">
             {modules.map(mod => {
               const active = mod.id === activeModuleId;
               return (
@@ -84,7 +84,7 @@ export function Sidebar({
                 <p className="text-sm font-semibold text-foreground">{activeModule.title}</p>
               </div>
             </div>
-            <nav className="flex-1 space-y-0.5 p-2">
+            <nav className="flex-1 space-y-0.5 p-2" aria-label="Main navigation">
               {activeModule.items.map(item => {
                 const isActive = activeView === item.view;
                 return (
@@ -93,7 +93,7 @@ export function Sidebar({
                     type="button"
                     onClick={() => onNavigate(item.view)}
                     className={cn(
-                      "flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                      "flex min-h-10 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
                       isActive
                         ? "bg-emerald/10 font-semibold text-emerald"
                         : "text-foreground/70 hover:bg-surface hover:text-foreground",

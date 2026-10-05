@@ -5,21 +5,26 @@
   --color-lime: #8ed52e;
   --color-navy: #0b2545;
   --color-gold: #c9a227;
-  --color-surface: hsl(var(--surface) / <alpha-value>);
-  --color-card: hsl(var(--card) / <alpha-value>);
-  --color-border: hsl(var(--border) / <alpha-value>);
-  --color-muted: hsl(var(--muted) / <alpha-value>);
-  --color-foreground: hsl(var(--foreground) / <alpha-value>);
-  --color-background: hsl(var(--background) / <alpha-value>);
-  --color-primary: hsl(var(--primary) / <alpha-value>);
-  --color-primary-foreground: hsl(var(--primary-foreground) / <alpha-value>);
-  --color-secondary: hsl(var(--secondary) / <alpha-value>);
-  --color-secondary-foreground: hsl(var(--secondary-foreground) / <alpha-value>);
-  --color-accent: hsl(var(--accent) / <alpha-value>);
-  --color-accent-foreground: hsl(var(--accent-foreground) / <alpha-value>);
-  --color-destructive: hsl(var(--destructive) / <alpha-value>);
-  --color-destructive-foreground: hsl(var(--destructive-foreground) / <alpha-value>);
-  --color-ring: hsl(var(--ring) / <alpha-value>);
+  --color-surface: hsl(var(--surface));
+  --color-card: hsl(var(--card));
+  --color-border: hsl(var(--border));
+  --color-muted: hsl(var(--muted));
+  --color-foreground: hsl(var(--foreground));
+  --color-background: hsl(var(--background));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-ring: hsl(var(--ring));
+  --shadow-sm: 0 1px 2px 0 rgb(11 37 69 / 0.08);
+  --shadow: 0 1px 3px 0 rgb(11 37 69 / 0.1), 0 1px 2px -1px rgb(11 37 69 / 0.1);
+  --shadow-md: 0 8px 20px -10px rgb(11 37 69 / 0.24);
+  --shadow-lg: 0 18px 36px -18px rgb(11 37 69 / 0.3);
+  --shadow-xl: 0 24px 52px -22px rgb(11 37 69 / 0.36);
   --color-status-ok: #00be73;
   --color-status-warn: #f59e0b;
   --color-status-danger: #ef4444;
@@ -83,10 +88,18 @@ html.dark {
   --ring: 152 100% 37%;
 }
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    border-color: hsl(var(--border));
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: hsl(var(--muted));
+  }
 }
 
 html,

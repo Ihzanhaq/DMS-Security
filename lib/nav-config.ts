@@ -168,6 +168,20 @@ export const clientModule: NavModule = {
   ],
 };
 
+/** Form and detail screens highlight the list page they belong to. */
+export const parentView: Partial<Record<AppView, AppView>> = {
+  "employee-form": "workforce",
+  "site-config": "sites",
+  "assignment-form": "deployment",
+  "attendance-correction": "attendance",
+  "payroll-allocation": "payroll",
+  "uniform-issue": "uniforms",
+  "inspection-form": "inspections",
+  "complaint-form": "complaints",
+  "sop-form": "sops",
+  "advance-form": "advances",
+};
+
 /** Icons for create menu */
 export const createMenuItems: { label: string; view: AppView; icon: LucideIcon }[] = [
   { label: "Employee", view: "employee-form", icon: Users },

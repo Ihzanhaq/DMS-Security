@@ -59,7 +59,7 @@ export function SegmentedControl<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-4 inline-flex max-w-full flex-wrap gap-1 rounded-xl border border-border bg-surface p-1", className)} role="tablist" data-enter>
+    <div className={cn("mb-4 inline-flex max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-surface p-1", className)} role="tablist" data-enter>
       {options.map(option => {
         const id = typeof option === "string" ? option : option.id;
         const label = typeof option === "string" ? option : option.label;
@@ -72,7 +72,7 @@ export function SegmentedControl<T extends string>({
             aria-selected={active}
             onClick={() => onChange(id)}
             className={cn(
-              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+              "shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
               active ? "bg-card text-foreground shadow-sm" : "text-muted hover:text-foreground",
             )}
           >

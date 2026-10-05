@@ -24,19 +24,19 @@ export function BottomNav({
 
   return (
     <>
-      <nav className="fixed bottom-0 left-0 right-0 z-30 flex h-16 items-center justify-around bg-navy md:hidden" aria-label="Main navigation">
+      <nav className="fixed bottom-0 left-0 right-0 z-30 flex h-16 items-center justify-around bg-navy md:hidden" aria-label="Mobile navigation">
         {items.map(item => {
           const active = activeView === item.view;
           return (
             <button key={item.view} type="button" onClick={() => onNavigate(item.view)}
-              className={cn("flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px]", active ? "text-emerald" : "text-white/60")}>
+              className={cn("flex min-w-0 flex-1 flex-col items-center gap-0.5 px-0.5 py-2 text-[10px]", active ? "text-emerald" : "text-white/60")}>
               <item.icon className="h-5 w-5" />
-              {item.label}
+              <span className="max-w-full truncate">{item.label}</span>
             </button>
           );
         })}
         <button type="button" onClick={() => setMoreOpen(true)}
-          className={cn("flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px]", onMoreView ? "text-emerald" : "text-white/60")}>
+          className={cn("flex min-w-0 flex-1 flex-col items-center gap-0.5 px-0.5 py-2 text-[10px]", onMoreView ? "text-emerald" : "text-white/60")}>
           <span className="flex h-5 w-5 items-center justify-center text-lg leading-none">⋯</span>
           More
         </button>
