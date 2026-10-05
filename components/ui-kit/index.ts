@@ -7,7 +7,8 @@ export { Field, Input, Select, Textarea, inputClass, textareaClass } from "./fie
 export { StatusChip, Status, DomainStatus } from "./status-chip";
 export type { StatusTone } from "./status-chip";
 export { SearchBar, FilterChips, ListFilterRow } from "./search-bar";
-export { ScrollableTable, SortableTh, TableRow, Td, Pagination } from "./data-table";
+export { ScrollableTable, SortableTh, TableRow, Td, Pagination, DataTable, Stepper } from "./data-table";
+export type { Column } from "./data-table";
 export { Sheet, DetailDrawer } from "./sheet";
 export { ConfirmProvider, useConfirm } from "./confirm-dialog";
 export { EmptyState, Skeleton } from "./empty-state";
