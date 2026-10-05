@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 
 export type LatLng = { lat: number; lng: number };
 
-const BOUNDARY_STYLE = { color: "#1d5b4f", weight: 1.5, fillColor: "#1d5b4f", fillOpacity: .1 };
+const BOUNDARY_STYLE = { color: "#00be73", weight: 1.5, fillColor: "#00be73", fillOpacity: .12 };
 
 /**
  * OpenStreetMap geofence view.

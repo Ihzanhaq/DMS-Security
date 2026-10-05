@@ -1,7 +1,9 @@
 "use client";
 
 import { useId, useState, type FormEvent } from "react";
-import { Plus } from "@phosphor-icons/react";
+import { Plus } from "lucide-react";
+import { Button, Input } from "@/components/ui-kit";
+import { cn } from "@/lib/utils";
 
 /** Labelled "type a name, then add" row. Enter submits; blanks and duplicates are refused with a visible reason. */
 export function AddItemRow({ label, placeholder, buttonLabel, existing, onAdd, disabled = false }: {
@@ -24,14 +26,16 @@ export function AddItemRow({ label, placeholder, buttonLabel, existing, onAdd, d
     setValue("");
   };
 
-  return <form className="add-item-row" onSubmit={submit}>
-    <label htmlFor={id}>{label}</label>
-    <div className="add-item-controls">
-      <input id={id} value={value} onChange={event => setValue(event.target.value)} placeholder={placeholder} disabled={disabled} autoComplete="off" />
-      <button type="submit" className="primary-button" disabled={disabled || !trimmed || duplicate}><Plus />{buttonLabel}</button>
-    </div>
-    <small className={duplicate ? "add-item-hint warn" : "add-item-hint"}>
-      {duplicate ? `"${trimmed}" is already in the list.` : "Type a name, then press Enter or click the button."}
-    </small>
-  </form>;
+  return (
+    <form className="mt-4 border-t border-border pt-4" onSubmit={submit}>
+      <label htmlFor={id} className="mb-2 block text-sm font-medium text-foreground">{label}</label>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input id={id} value={value} onChange={event => setValue(event.target.value)} placeholder={placeholder} disabled={disabled} autoComplete="off" />
+        <Button type="submit" className="h-11 shrink-0" disabled={disabled || !trimmed || duplicate}><Plus />{buttonLabel}</Button>
+      </div>
+      <small className={cn("mt-1 block text-xs", duplicate ? "text-status-danger" : "text-muted")}>
+        {duplicate ? `"${trimmed}" is already in the list.` : "Type a name, then press Enter or select the button."}
+      </small>
+    </form>
+  );
 }

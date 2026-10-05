@@ -16,7 +16,7 @@ export type AppView =
   | "sops" | "reports" | "imports" | "settings"
   | "employee-form" | "site-config" | "assignment-form" | "attendance-correction"
   | "payroll-allocation" | "night-vigilance" | "uniform-issue" | "exit-clearance"
-  | "penalties" | "inspection-form" | "complaint-form" | "sop-form" | "action-centre"
+  | "penalties" | "inspection-form" | "complaint-form" | "sop-form" | "action-centre" | "advance-form"
   | "tickets" | "recruitment" | "hr-quality" | "duty-changes" | "spare-payments" | "analytics" | "access"
   | "guard-home" | "guard-punch" | "guard-schedule" | "guard-leave"
   | "guard-advance" | "guard-payslips" | "guard-sops" | "guard-profile" | "guard-vigilance"

@@ -1,27 +1,47 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { CheckCircle } from "@phosphor-icons/react";
+import { CheckCircle2, Info, XCircle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-const ToastContext = createContext<(message: string) => void>(() => {});
+type ToastKind = "success" | "error" | "info";
 
-/** Report the outcome of an action. Replaces the prototype's alert() calls. */
-export function useToast() { return useContext(ToastContext); }
+type ToastPayload = { message: string; kind?: ToastKind };
+
+const ToastContext = createContext<(message: string | ToastPayload) => void>(() => {});
+
+export function useToast() {
+  return useContext(ToastContext);
+}
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [message, setMessage] = useState<string | null>(null);
-  const notify = useCallback((next: string) => setMessage(next), []);
+  const [toast, setToast] = useState<ToastPayload | null>(null);
+  const notify = useCallback((next: string | ToastPayload) => {
+    setToast(typeof next === "string" ? { message: next, kind: "success" } : next);
+  }, []);
 
   useEffect(() => {
-    if (!message) return;
-    const timer = window.setTimeout(() => setMessage(null), 2800);
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 3000);
     return () => window.clearTimeout(timer);
-  }, [message]);
+  }, [toast]);
+
+  const Icon = toast?.kind === "error" ? XCircle : toast?.kind === "info" ? Info : CheckCircle2;
+  const iconClass =
+    toast?.kind === "error" ? "text-status-danger" : toast?.kind === "info" ? "text-navy" : "text-emerald";
 
   return (
     <ToastContext.Provider value={notify}>
       {children}
-      {message && <div className="toast" role="status"><CheckCircle weight="fill" /><span>{message}</span></div>}
+      {toast && (
+        <div
+          className="fixed right-4 top-4 z-[70] flex max-w-xs items-start gap-2 rounded-xl border border-border bg-card p-3 shadow-lg"
+          role="status"
+        >
+          <Icon className={cn("h-5 w-5 shrink-0", iconClass)} />
+          <span className="text-sm text-foreground">{toast.message}</span>
+        </div>
+      )}
     </ToastContext.Provider>
   );
 }

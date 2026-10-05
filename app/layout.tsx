@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
-import "./tokens.css";
 import "./globals.css";
-import "./workflows.css";
-import "./console.css";
 
 export const metadata: Metadata = {
   title: "BMG Security — Workforce Operations",
