@@ -35,7 +35,7 @@ import { REPORT_CATALOG } from "@/lib/report-catalog";
 import { SETTINGS_CATALOG } from "@/lib/settings-catalog";
 import type { AppView } from "@/types/domain";
 
-export type NavClickMeta = { report?: string; settingsGroup?: string; site?: string };
+export type NavClickMeta = { report?: string; settingsGroup?: string; site?: string; roleId?: string; userId?: string; tab?: string };
 
 export type NavLink = {
   label: string;
@@ -213,6 +213,8 @@ export const parentView: Partial<Record<AppView, AppView>> = {
   "complaint-form": "complaints",
   "sop-form": "site-detail",
   "advance-form": "advances",
+  "role-editor": "access",
+  "member-access": "access",
 };
 
 /** Icons for create menu */

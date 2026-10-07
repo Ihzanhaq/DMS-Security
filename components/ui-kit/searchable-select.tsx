@@ -1,14 +1,15 @@
 "use client";
 
 import {
-  Children, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
+  Children, Fragment, isValidElement, useEffect, useId, useLayoutEffect, useMemo, useRef, useState,
   type ChangeEvent, type KeyboardEvent, type ReactElement, type ReactNode, type SelectHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type Option = { value: string; label: string; disabled: boolean };
+/** `group` is the label of the enclosing `<optgroup>`, rendered as a non-selectable heading. */
+type Option = { value: string; label: string; disabled: boolean; group?: string };
 
 /** Plain text of an option's children, e.g. `{name} · {id}` → "Asha · BMG-1". */
 function textOf(node: ReactNode): string {
@@ -19,16 +20,18 @@ function textOf(node: ReactNode): string {
   return "";
 }
 
-/** Reads `<option>` elements from children, including ones inside fragments and arrays. */
-function collectOptions(children: ReactNode, out: Option[] = []): Option[] {
+/** Reads `<option>` elements from children, including ones inside fragments, arrays and `<optgroup>`s. */
+function collectOptions(children: ReactNode, out: Option[] = [], group?: string): Option[] {
   Children.forEach(children, child => {
     if (!isValidElement(child)) return;
-    const element = child as ReactElement<{ value?: string | number; children?: ReactNode; disabled?: boolean }>;
+    const element = child as ReactElement<{ value?: string | number; children?: ReactNode; disabled?: boolean; label?: string }>;
     if (element.type === "option") {
       const label = textOf(element.props.children);
-      out.push({ value: element.props.value !== undefined ? String(element.props.value) : label, label, disabled: !!element.props.disabled });
+      out.push({ value: element.props.value !== undefined ? String(element.props.value) : label, label, disabled: !!element.props.disabled, group });
+    } else if (element.type === "optgroup") {
+      collectOptions(element.props.children, out, element.props.label);
     } else if (element.props.children) {
-      collectOptions(element.props.children, out);
+      collectOptions(element.props.children, out, group);
     }
   });
   return out;
@@ -164,13 +167,16 @@ export function SearchableSelect({
           {filtered.length === 0 && <li className="px-3 py-2 text-sm text-muted">No matches</li>}
           {filtered.map((option, index) => {
             const isSelected = option.value === current;
-            return <li key={`${option.value}-${index}`} id={`${listId}-${index}`} data-index={index} role="option" aria-selected={isSelected} aria-disabled={option.disabled}
+            const heading = option.group && option.group !== filtered[index - 1]?.group
+              ? <li role="presentation" className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{option.group}</li>
+              : null;
+            return <Fragment key={`${option.value}-${index}`}>{heading}<li id={`${listId}-${index}`} data-index={index} role="option" aria-selected={isSelected} aria-disabled={option.disabled}
               onMouseEnter={() => setHighlight(index)} onClick={() => choose(option)}
               className={cn("flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm",
                 index === highlight && "bg-surface", isSelected && "font-medium", option.disabled && "cursor-not-allowed opacity-50")}>
               <span className="min-w-0 flex-1 truncate">{option.label}</span>
               {isSelected && <Check className="size-4 shrink-0 text-emerald" aria-hidden />}
-            </li>;
+            </li></Fragment>;
           })}
         </ul>
       </div>,

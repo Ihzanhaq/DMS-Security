@@ -17,7 +17,9 @@ import {
   ActionCentreScreen, DetailedWorkflowScreen, EmployeeFormScreen, ExitClearanceScreen,
   NightVigilanceScreen, PayrollAllocationScreen, PenaltiesScreen, SiteConfigurationScreen,
 } from "@/features/workflows/workflow-screens";
-import { AccessScreen } from "@/features/access/access-screen";
+import { AccessScreen, isAccessTab, type AccessTab } from "@/features/access/access-screen";
+import { RoleEditorScreen } from "@/features/access/role-editor-screen";
+import { MemberAccessScreen } from "@/features/access/member-access-screen";
 import { AccessProvider, useAccess } from "@/components/shared/access-context";
 import { OnboardingProvider, useOnboarding } from "@/components/shared/onboarding-context";
 import { OpsProvider, useOps } from "@/components/shared/ops-context";
@@ -73,6 +75,9 @@ function HrmsShell() {
   const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null);
   const [allocationEmployeeId, setAllocationEmployeeId] = useState<string | null>(null);
   const [selectedSite, setSelectedSite] = useState<string | null>(null);
+  const [accessTab, setAccessTab] = useState<AccessTab>("members");
+  const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   // Content waits until URL params are applied, so deep links never flash the dashboard.
   const [urlReady, setUrlReady] = useState(false);
   const [siteInitialTab, setSiteInitialTab] = useState<"profile" | "salary" | "boundary" | "documents">("profile");
@@ -169,6 +174,12 @@ function HrmsShell() {
     else if (requested) setView(requested as AppView);
     const requestedSite = params.get("site");
     if (requestedSite) setSelectedSite(requestedSite);
+    const requestedTab = params.get("tab");
+    if (isAccessTab(requestedTab)) setAccessTab(requestedTab);
+    const requestedRole = params.get("role");
+    if (requestedRole) setSelectedRoleId(requestedRole);
+    const requestedMember = params.get("member");
+    if (requestedMember) setSelectedMemberId(requestedMember);
     const requestedReport = params.get("report");
     if (requestedReport && isReportName(requestedReport)) setActiveReport(requestedReport);
     const requestedSettings = params.get("settings");
@@ -204,6 +215,9 @@ function HrmsShell() {
     const options = parseNavMeta(meta);
     const viewKey = nextView === "sops" ? "sites" : nextView;
     if (options?.site) setSelectedSite(options.site);
+    if (viewKey === "access") setAccessTab(isAccessTab(options?.tab) ? options.tab : "members");
+    if (options?.roleId) setSelectedRoleId(options.roleId);
+    if (options?.userId) setSelectedMemberId(options.userId);
     setView(viewKey as AppView);
     if (options?.report && isReportName(options.report)) setActiveReport(options.report);
     if (options?.settingsGroup && isSettingsGroup(options.settingsGroup)) setActiveSettingsGroup(options.settingsGroup);
@@ -219,6 +233,12 @@ function HrmsShell() {
     if (viewKey === "settings" && options?.settingsGroup && isSettingsGroup(options.settingsGroup)) {
       url.searchParams.set("settings", options.settingsGroup);
     } else if (viewKey !== "settings") url.searchParams.delete("settings");
+    if (viewKey === "access" && isAccessTab(options?.tab) && options.tab !== "members") url.searchParams.set("tab", options.tab);
+    else url.searchParams.delete("tab");
+    if (viewKey === "role-editor" && (options?.roleId ?? selectedRoleId)) url.searchParams.set("role", (options?.roleId ?? selectedRoleId)!);
+    else url.searchParams.delete("role");
+    if (viewKey === "member-access" && (options?.userId ?? selectedMemberId)) url.searchParams.set("member", (options?.userId ?? selectedMemberId)!);
+    else url.searchParams.delete("member");
     window.history.replaceState({}, "", url);
   };
 
@@ -371,6 +391,7 @@ function HrmsShell() {
               role: currentRole, navigate, canOpen, onboardingReady: onboarding.ready,
               editingEmployeeId, openEmployeeForm, allocationEmployeeId, openAllocationAudit,
               selectedSite, openSiteConfig, openSiteDetail, siteInitialTab, importKind, openImports, ticketCreate,
+              accessTab, selectedRoleId, selectedMemberId,
               activeReport,
               activeSettingsGroup,
               activeGuard,
@@ -428,6 +449,9 @@ type ViewContext = {
   importKind: string | undefined;
   openImports: (kind: string) => void;
   ticketCreate: boolean;
+  accessTab: AccessTab;
+  selectedRoleId: string | null;
+  selectedMemberId: string | null;
   activeReport: ReportName;
   activeSettingsGroup: SettingsGroup;
   activeGuard: GuardUser;
@@ -511,7 +535,9 @@ function renderView(view: AppView, ctx: ViewContext) {
     case "recruitment": return <RecruitmentScreen onNavigate={navigate} />;
     case "tickets": return <TicketsScreen key={ticketCreate ? "create" : "list"} onNavigate={navigate} startCreating={ticketCreate} />;
     case "analytics": return <AnalyticsScreen onNavigate={navigate} />;
-    case "access": return <AccessScreen onNavigate={navigate} />;
+    case "access": return <AccessScreen tab={ctx.accessTab} onNavigate={navigate} />;
+    case "role-editor": return <RoleEditorScreen key={ctx.selectedRoleId ?? "new"} roleId={ctx.selectedRoleId} onNavigate={navigate} />;
+    case "member-access": return <MemberAccessScreen key={ctx.selectedMemberId ?? "none"} userId={ctx.selectedMemberId} onNavigate={navigate} />;
     case "action-centre": return <ActionCentreScreen onOpen={navigate} />;
     case "assignment-form": return <DetailedWorkflowScreen kind="assignment" onBack={() => navigate("deployment")} />;
     case "attendance-correction": return <DetailedWorkflowScreen kind="attendance" onBack={() => navigate("attendance")} />;
