@@ -52,6 +52,12 @@ export default defineConfig(async () => {
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }
       : undefined,
+    optimizeDeps: {
+      include: ["xlsx"],
+    },
+    ssr: {
+      noExternal: ["xlsx"],
+    },
     plugins: [
       vinext(),
       sites(),

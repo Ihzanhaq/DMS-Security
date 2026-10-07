@@ -1,8 +1,7 @@
 "use client";
 
-import { Bell, Moon, Plus, Search, Shield, Sun } from "lucide-react";
+import { Bell, Moon, Shield, Sun } from "lucide-react";
 import { APP_NAME } from "@/lib/labels";
-import { Button } from "@/components/ui-kit";
 import { SearchTrigger } from "./global-search";
 import { UserMenu } from "./user-menu";
 import type { AppNotification } from "@/types/domain";
@@ -16,13 +15,11 @@ export function TopBar({
   notificationsOpen,
   onToggleNotifications,
   onNotificationClick,
-  onCreateOpen,
   users,
   roles,
   currentUserId,
   onViewAs,
   onSignOut,
-  showCreate,
   showSearch,
 }: {
   showSearch: boolean;
@@ -32,45 +29,33 @@ export function TopBar({
   notifications: AppNotification[];
   notificationsOpen: boolean;
   onToggleNotifications: () => void;
-  onNotificationClick: (id: string, view: string) => void;
-  onCreateOpen: () => void;
+  onNotificationClick: (item: AppNotification) => void;
   users: { id: string; name: string; roleId: string; status: string }[];
   roles: { id: string; name: string }[];
   currentUserId: string;
   onViewAs: (userId: string) => void;
   onSignOut: () => void;
-  showCreate: boolean;
 }) {
   return (
     <header className="sticky top-0 z-20 mx-3 my-2 flex h-14 items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 px-4 shadow-sm backdrop-blur md:mx-5 lg:mx-6">
-      <div className="flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-navy md:hidden" aria-label={APP_NAME}>
+      <div className="flex min-w-0 items-center gap-2">
+        {showSearch && <SearchTrigger onClick={onOpenSearch} />}
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-navy md:hidden" aria-label={APP_NAME}>
           <Shield className="h-4 w-4 text-emerald" />
         </span>
-        {showSearch ? <SearchTrigger onClick={onOpenSearch} /> : <span className="hidden text-sm font-semibold md:inline">{APP_NAME}</span>}
+        <h2 className={cn("truncate text-base font-semibold text-foreground", showSearch && "md:hidden")}>{APP_NAME}</h2>
       </div>
-      <div className="flex items-center gap-1 sm:gap-2">
-        {showSearch && (
-          <Button variant="ghost" size="icon" className="md:hidden" onClick={onOpenSearch} aria-label="Search">
-            <Search className="h-5 w-5" />
-          </Button>
-        )}
-        <Button variant="ghost" size="icon" onClick={onToggleTheme} aria-label="Toggle theme">
+      <div className="flex shrink-0 items-center gap-2">
+        <button type="button" onClick={onToggleTheme} aria-label="Toggle theme" title="Toggle theme" className="relative flex h-9 w-9 items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface hover:text-foreground">
           {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-        </Button>
+        </button>
         <div className="relative">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onToggleNotifications}
-            aria-label="Notifications"
-            className={cn(notifications.length > 0 && "relative")}
-          >
+          <button type="button" onClick={onToggleNotifications} aria-label="Notifications" title="Notifications" className="relative flex h-9 w-9 items-center justify-center rounded-xl text-muted transition-colors hover:bg-surface hover:text-foreground">
             <Bell className="h-5 w-5" />
             {notifications.length > 0 && (
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-status-danger ring-2 ring-card" />
+              <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-status-danger" />
             )}
-          </Button>
+          </button>
           {notificationsOpen && (
             <div className="absolute right-0 top-full z-30 mt-2 w-80 rounded-2xl border border-border bg-card shadow-xl">
               <div className="border-b border-border px-4 py-3 text-sm font-semibold">
@@ -85,9 +70,9 @@ export function TopBar({
                       <button
                         type="button"
                         className="w-full rounded-lg px-3 py-2 text-left hover:bg-surface"
-                        onClick={() => onNotificationClick(item.id, item.targetView)}
+                        onClick={() => onNotificationClick(item)}
                       >
-                        <strong className="block text-sm">{item.title}</strong>
+                        <strong className="block text-sm font-medium">{item.title}</strong>
                         <small className="text-xs text-muted">{item.detail}</small>
                       </button>
                     </li>
@@ -97,12 +82,6 @@ export function TopBar({
             </div>
           )}
         </div>
-        {showCreate && (
-          <Button onClick={onCreateOpen} className="hidden sm:inline-flex">
-            <Plus className="h-4 w-4" />
-            Create
-          </Button>
-        )}
         <UserMenu
           users={users}
           roles={roles}

@@ -8,9 +8,9 @@ import {
 import {
   BackCrumb, Button, DefRows, DetailDrawer, Field, FormGrid, FormStack, IconTile, InlineAlert,
   Input, InputAffix, KeyValue, ListRow, PageHeader, Panel, PersonCell, SegmentedControl, Select,
-  Section, SplitLayout, StatStrip, StatusChip, Textarea, Timeline, ToggleRow, useConfirm,
+  Section, SplitLayout, StatStrip, StatusChip, StarRating, Textarea, Timeline, ToggleRow, useConfirm,
 } from "@/components/ui-kit";
-import { GeoMap } from "@/components/shared/geo-map";
+import { BoundaryEditor } from "@/components/shared/boundary-editor";
 import { useToast } from "@/components/shared/toast-context";
 import { useOnboarding, withChecklist } from "@/components/shared/onboarding-context";
 import { FileSlot } from "@/components/shared/file-upload";
@@ -23,12 +23,15 @@ import { useAccess } from "@/components/shared/access-context";
 import { computeAdvanceEligibility } from "@/lib/advance-calculator";
 import { APP_TODAY } from "@/lib/app-date";
 import { NAV, ROLE_TERMS } from "@/lib/labels";
+import type { NavClickMeta } from "@/lib/nav-config";
 import { cn } from "@/lib/utils";
-import type { AppView, BenefitOverride, BenefitScheme, EmployeeDocument, EmployeeDocumentStatus, EscalationContact, LatLng, PayBasis, SiteDocument, SiteDocumentKind, SiteFeedback } from "@/types/domain";
+import type { AppView, BenefitOverride, BenefitScheme, EmployeeDocument, EmployeeDocumentStatus, EscalationContact, LatLng, PayBasis, SiteDocument, SiteDocumentKind, SiteFeedback, NightCheck } from "@/types/domain";
 
 const districts = keralaDistricts;
 const sites = ["Lulu Mall, Kochi", "Aster Medcity", "TCS Technopark", "Lake Palace Resort"];
 const kitItems = ["Shirt", "Trousers", "Shoes", "Belt", "Cap", "Tie", "Socks", "Raincoat", "Whistle", "Lanyard", "ID holder", "Notebook"];
+/** Phone on file for an employee id, when the id resolves. */
+const phoneOf = (employeeId: string) => employeeRecords.find(item => item.id === employeeId)?.phone;
 const dutyUnits = ["0.25", "0.50", "0.75", "1.00", "1.50"];
 
 /* ------------------------------ Employee form ------------------------------ */
@@ -248,9 +251,28 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
 
 /* --------------------------- Site configuration ---------------------------- */
 
+function bumpSiteDocumentVersion(current: string): string {
+  const trimmed = current.trim() || "1.0";
+  const parts = trimmed.split(".");
+  const last = parts[parts.length - 1];
+  const minor = Number(last);
+  if (parts.length >= 2 && !Number.isNaN(minor)) {
+    parts[parts.length - 1] = String(minor + 1);
+    return parts.join(".");
+  }
+  const whole = Number(trimmed);
+  if (!Number.isNaN(whole)) return String(whole + 1);
+  return `${trimmed}.1`;
+}
+
+function versionAfterSiteDocumentUpload(previousVersion: string, hadFile: boolean): string {
+  const base = previousVersion.trim() || "1.0";
+  return hadFile ? bumpSiteDocumentVersion(base) : base;
+}
+
 type SiteTab = "Site profile" | "Posts and shifts" | "Geofence and attendance" | "Team and escalation" | "Documents and SOP" | "Salary and benefits";
 
-export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: { onBack: () => void; role: string; siteName?: string | null; initialTab?: "profile" | "salary" | "boundary" }) {
+export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: { onBack: () => void; role: string; siteName?: string | null; initialTab?: "profile" | "salary" | "boundary" | "documents" }) {
   const isNew = !siteName;
   const selectedSite = siteName ?? "";
   const siteRecord = siteRecords.find(item => item.name === selectedSite) ?? siteRecords[0];
@@ -260,7 +282,10 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
   const confirm = useConfirm();
   const salaryManager = can("salary", "view");
   const salaryEditor = can("salary", "edit");
-  const firstTab: SiteTab = initialTab === "salary" && salaryManager ? "Salary and benefits" : initialTab === "boundary" ? "Geofence and attendance" : "Site profile";
+  const firstTab: SiteTab = initialTab === "documents" ? "Documents and SOP"
+    : initialTab === "salary" && salaryManager ? "Salary and benefits"
+      : initialTab === "boundary" ? "Geofence and attendance"
+        : "Site profile";
   const [tab, setTab] = useState<SiteTab>(firstTab);
   const [saved, setSaved] = useState(false);
   const [name, setName] = useState(selectedSite);
@@ -362,40 +387,29 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
       </div>
     </Panel>}
 
-    {tab === "Geofence and attendance" && <SplitLayout>
-      <Panel title="Attendance boundary" description={boundaryMode === "circle" ? "Drag the pin or click the map to move the boundary." : "Click the map to add a boundary corner."}>
-        <SegmentedControl options={[{ id: "circle", label: "Circle" }, { id: "polygon", label: "Polygon" }] as const} value={boundaryMode} onChange={setBoundaryMode} />
-        <GeoMap center={{ lat: latitude, lng: longitude }} radius={radius} draggable={boundaryMode === "circle"}
-          polygon={boundaryMode === "polygon" ? polygon : undefined}
-          onMapClick={boundaryMode === "polygon" ? point => setPolygon(current => [...current, point]) : undefined}
-          onMove={next => { setLatitude(next.lat); setLongitude(next.lng); }} className="compact" />
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-          <span>Centre <b className="text-foreground">{latitude.toFixed(5)}, {longitude.toFixed(5)}</b></span>
-          {boundaryMode === "circle"
-            ? <span>Radius <b className="text-foreground">{radius} m</b></span>
-            : <span>Corners <b className="text-foreground">{polygon.length}</b>{polygon.length < 3 && " · add at least 3"}</span>}
-        </div>
+    {tab === "Geofence and attendance" && <SplitLayout wideFirst>
+      <Panel title="Attendance boundary" description="Guards can only punch in inside this area. Use satellite view to trace the site's walls or fence.">
+        <BoundaryEditor mode={boundaryMode} onModeChange={setBoundaryMode}
+          center={{ lat: latitude, lng: longitude }} radius={radius} polygon={polygon}
+          onCircleChange={(next, nextRadius) => { setLatitude(next.lat); setLongitude(next.lng); setRadius(nextRadius); }}
+          onPolygonChange={points => {
+            setPolygon(points);
+            // The site pin follows the outline so maps and distance hints still centre on the site.
+            if (points.length >= 3) {
+              setLatitude(Number((points.reduce((sum, point) => sum + point.lat, 0) / points.length).toFixed(6)));
+              setLongitude(Number((points.reduce((sum, point) => sum + point.lng, 0) / points.length).toFixed(6)));
+            }
+          }} />
       </Panel>
-      <Panel title="Boundary and attendance rules" description="Paste coordinates, use this device's location, or set them on the map.">
+      <Panel title="Boundary and attendance rules" className="lg:sticky lg:top-20 lg:self-start"
+        description={boundaryMode === "circle" ? "The circle's centre. Paste coordinates, use this device's location, or drag the pin on the map." : "The outline on the map decides who is inside. The site pin is placed at its centre automatically."}>
         <FormStack>
-          <FormGrid>
+          {boundaryMode === "circle" && <><FormGrid>
             <Field label="Latitude"><Input type="number" step="0.000001" value={latitude} onChange={event => setLatitude(Number(event.target.value))} /></Field>
             <Field label="Longitude"><Input type="number" step="0.000001" value={longitude} onChange={event => setLongitude(Number(event.target.value))} /></Field>
           </FormGrid>
-          <Button variant="outline" onClick={locate}><Crosshair />Use my current location</Button>
+          <Button variant="outline" onClick={locate}><Crosshair />Use my current location</Button></>}
           {boundaryMode === "circle" && <Field label="Boundary radius"><InputAffix suffix="metres" type="number" value={radius} onChange={event => setRadius(Number(event.target.value))} /></Field>}
-          {boundaryMode === "polygon" && <div className="rounded-xl border border-border">
-            {polygon.length === 0 && <p className="p-3 text-sm text-muted">No corners yet. Click the map to draw the boundary.</p>}
-            {polygon.map((point, index) => (
-              <div key={`${point.lat}-${point.lng}-${index}`} className="flex items-center gap-3 border-t border-border px-3 py-2 text-sm first:border-t-0">
-                <span className="text-xs text-muted">#{index + 1}</span><b className="flex-1 font-mono text-xs">{point.lat.toFixed(5)}, {point.lng.toFixed(5)}</b>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-status-danger" aria-label={`Remove corner ${index + 1}`} title="Remove corner"
-                  onClick={() => confirmRemove(`Remove corner ${index + 1}?`, "The boundary will be redrawn without this point.", () => setPolygon(current => current.filter((_, row) => row !== index)))}><Trash2 /></Button>
-              </div>
-            ))}
-            {polygon.length > 0 && <div className="border-t border-border p-2"><Button variant="ghost" size="sm" className="text-status-danger"
-              onClick={() => confirmRemove("Clear the whole boundary?", "All corners will be removed. Attendance punches cannot be verified until a new boundary is drawn.", () => setPolygon([]))}>Clear boundary</Button></div>}
-          </div>}
           <FormGrid>
             <Field label="Late-arrival grace" hint="15–60 minutes per site policy."><InputAffix suffix="minutes" type="number" min={15} max={60} value={graceMins} onChange={event => setGraceMins(Number(event.target.value))} /></Field>
             <Field label="GPS accuracy threshold"><InputAffix suffix="metres" type="number" defaultValue={50} /></Field>
@@ -436,41 +450,74 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
       </Panel>
     </SplitLayout>}
 
-    {tab === "Documents and SOP" && <SplitLayout>
-      <Panel title="Site documents" description="Agreement, PCC and biodata requirements, SOP and check data. Saving alerts the lead field officer."
+    {tab === "Documents and SOP" && <>
+      <Panel title="Site documents" description="Agreement, PCC, biodata, SOP and check data. One row per document — attach a file, then save. The lead field officer is notified."
         action={<Button variant="outline" size="sm" onClick={() => { setDocs(current => [...current, { id: `SDOC-${Date.now()}`, site: selectedSite, kind: "sop", title: "New document", version: "1.0", updatedOn: APP_TODAY, updatedBy: role }]); setDocsDirty(true); }}><Plus />Add document</Button>}>
         {docs.length === 0 && <p className="text-sm text-muted">No documents recorded for this site yet.</p>}
-        {docs.map((doc, index) => (
-          <ListRow key={doc.id} className="grid gap-2 sm:grid-cols-[150px_1fr_70px_40px]">
-            <Select className="h-9" value={doc.kind} onChange={event => editDoc(index, { kind: event.target.value as SiteDocumentKind })} aria-label={`Document ${index + 1} type`}>
-              <option value="agreement">Client agreement</option><option value="pcc-requirement">PCC requirement</option><option value="biodata-requirement">Biodata requirement</option><option value="sop">SOP</option><option value="check-data">Check data</option>
-            </Select>
-            <div className="min-w-0">
-              <Input className="h-9" value={doc.title} onChange={event => editDoc(index, { title: event.target.value })} aria-label={`Document ${index + 1} title`} />
-              <small className="mt-1 block text-[11px] text-muted">Updated {doc.updatedOn}</small>
+        {docs.length > 0 && (
+          <div className="-mx-1 overflow-x-auto">
+            <div className="min-w-[920px] px-1">
+              <div className="grid grid-cols-[minmax(148px,1fr)_minmax(220px,2fr)_72px_minmax(240px,1.4fr)_40px] items-end gap-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                <span>Type</span><span>Title</span><span>Ver.</span><span>File</span><span />
+              </div>
+              <div className="divide-y divide-border">
+                {docs.map((doc, index) => (
+                  <div key={doc.id} className="grid grid-cols-[minmax(148px,1fr)_minmax(220px,2fr)_72px_minmax(240px,1.4fr)_40px] items-center gap-3 py-3">
+                    <Select className="h-9 w-full" value={doc.kind} onChange={event => editDoc(index, { kind: event.target.value as SiteDocumentKind })} aria-label={`Document ${index + 1} type`}>
+                      <option value="agreement">Client agreement</option><option value="pcc-requirement">PCC requirement</option><option value="biodata-requirement">Biodata requirement</option><option value="sop">SOP</option><option value="check-data">Check data</option>
+                    </Select>
+                    <div className="min-w-0">
+                      <Input className="h-9 w-full" value={doc.title} onChange={event => editDoc(index, { title: event.target.value })} aria-label={`Document ${index + 1} title`} />
+                      <small className="mt-1 block truncate text-[11px] text-muted">Updated {doc.updatedOn}</small>
+                    </div>
+                    <Input className="h-9 w-full bg-surface" value={doc.version} readOnly aria-readonly title="Updates automatically when you upload or replace a file" aria-label={`Document ${index + 1} version`} />
+                    <FileSlot
+                      storageKey={`site-${selectedSite}-${doc.id}`}
+                      file={doc.file}
+                      label={doc.title}
+                      onChange={file => {
+                        if (!file) { editDoc(index, { file: undefined }); return; }
+                        const hadFile = Boolean(doc.file);
+                        editDoc(index, {
+                          file,
+                          version: versionAfterSiteDocumentUpload(doc.version, hadFile),
+                          updatedOn: APP_TODAY,
+                        });
+                      }}
+                    />
+                    <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-status-danger" aria-label={`Remove ${doc.title}`} title="Remove document"
+                      onClick={() => confirmRemove(`Remove ${doc.title}?`, "The document will be removed from this site when you save.", () => { setDocs(current => current.filter((_, row) => row !== index)); setDocsDirty(true); })}><Trash2 /></Button>
+                  </div>
+                ))}
+              </div>
             </div>
-            <Input className="h-9" value={doc.version} onChange={event => editDoc(index, { version: event.target.value })} aria-label={`Document ${index + 1} version`} />
-            <Button variant="ghost" size="icon" className="h-9 w-9 text-status-danger" aria-label={`Remove ${doc.title}`} title="Remove document"
-              onClick={() => confirmRemove(`Remove ${doc.title}?`, "The document will be removed from this site when you save.", () => { setDocs(current => current.filter((_, row) => row !== index)); setDocsDirty(true); })}><Trash2 /></Button>
-          </ListRow>
-        ))}
+          </div>
+        )}
         {docsDirty && <InlineAlert tone="warning" className="mt-3">Unsaved document changes. Saving notifies {officers[0] ?? "the field officer"}.</InlineAlert>}
       </Panel>
-      <Panel title="Client feedback" description="Satisfaction scores collected at this site.">
+      <Panel title="Client feedback" description="Satisfaction scores collected at this site." className="mt-4">
         {feedbackEntries.length === 0 && <p className="mb-3 text-sm text-muted">No feedback recorded yet.</p>}
         {feedbackEntries.map(entry => (
           <ListRow key={entry.id}>
             <span className="flex h-10 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald/10 text-sm font-bold text-emerald">{entry.satisfaction}/10</span>
-            <div className="min-w-0"><strong className="block text-sm">{entry.date}</strong><small className="text-xs text-muted">{entry.note}</small></div>
+            <div className="min-w-0"><strong className="block text-sm font-medium">{entry.date}</strong><small className="text-xs text-muted">{entry.note}</small></div>
           </ListRow>
         ))}
-        <FormStack className="mt-4 border-t border-border pt-4">
-          <Field label="Satisfaction score (1–10)"><Select value={feedbackScore} onChange={event => setFeedbackScore(Number(event.target.value))}>{Array.from({ length: 10 }, (_, index) => index + 1).map(score => <option key={score} value={score}>{score}</option>)}</Select></Field>
-          <Field label="What did the client say?"><Textarea rows={2} value={feedbackNote} onChange={event => setFeedbackNote(event.target.value)} placeholder="Summary of the conversation" /></Field>
-          <Button variant="outline" disabled={!feedbackNote.trim()} onClick={() => { setFeedbackEntries(current => [{ id: `FB-${Date.now()}`, site: selectedSite, date: APP_TODAY, satisfaction: feedbackScore, note: feedbackNote.trim() }, ...current]); setFeedbackNote(""); notify("Client feedback recorded"); }}><Plus />Record feedback</Button>
-        </FormStack>
+        <div className="mt-4 grid gap-4 border-t border-border pt-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(160px,0.28fr)_1fr] sm:gap-x-4 sm:gap-y-2">
+            <div className="grid gap-2 sm:contents">
+              <span className="text-sm font-medium text-foreground">Satisfaction</span>
+              <StarRating value={feedbackScore} onChange={setFeedbackScore} />
+            </div>
+            <div className="grid gap-2 sm:contents">
+              <span className="text-sm font-medium text-foreground">What did the client say?</span>
+              <Textarea rows={2} value={feedbackNote} onChange={event => setFeedbackNote(event.target.value)} placeholder="Summary of the conversation" aria-label="Client feedback" />
+            </div>
+          </div>
+          <Button variant="outline" className="w-fit" disabled={!feedbackNote.trim()} onClick={() => { setFeedbackEntries(current => [{ id: `FB-${Date.now()}`, site: selectedSite, date: APP_TODAY, satisfaction: feedbackScore, note: feedbackNote.trim() }, ...current]); setFeedbackNote(""); notify("Client feedback recorded"); }}><Plus />Record feedback</Button>
+        </div>
       </Panel>
-    </SplitLayout>}
+    </>}
 
     {tab === "Salary and benefits" && salaryManager && <SplitLayout>
       <Panel title="Site pay rule" description="Used for employees paid site-wise.">
@@ -485,7 +532,7 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
             ] as const).map(item => (
               <label key={item[0]} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-3", scheme === item[0] ? "border-emerald bg-emerald/5" : "border-border")}>
                 <input type="radio" name="site-scheme" className="mt-1 accent-[#00be73]" checked={scheme === item[0]} disabled={!salaryEditor} onChange={() => setScheme(item[0])} />
-                <span><strong className="block text-sm">{item[1]}</strong><small className="text-xs text-muted">{item[2]}</small></span>
+                <span><strong className="block text-sm font-medium">{item[1]}</strong><small className="text-xs text-muted">{item[2]}</small></span>
               </label>
             ))}
           </div>
@@ -509,7 +556,7 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
 
 /* -------------------------- Payroll allocation audit ------------------------ */
 
-export function PayrollAllocationScreen({ employeeId: selectedEmployeeId, onBack }: { employeeId?: string | null; onBack: () => void }) {
+export function PayrollAllocationScreen({ employeeId: selectedEmployeeId, onBack, onNavigate }: { employeeId?: string | null; onBack: () => void; onNavigate?: (view: string, meta?: string | NavClickMeta) => void }) {
   const notify = useToast();
   const { getBreakdown } = usePayroll();
   const [employeeId, setEmployeeId] = useState(selectedEmployeeId ?? "BMG-2274");
@@ -530,10 +577,10 @@ export function PayrollAllocationScreen({ employeeId: selectedEmployeeId, onBack
     {approved && <InlineAlert tone="success" className="mb-4">Allocation approved and added to the payroll audit trail.</InlineAlert>}
     {breakdown.exceptions.length > 0 && <InlineAlert tone="danger" className="mb-4">{breakdown.exceptions.length} configuration exception{breakdown.exceptions.length === 1 ? "" : "s"} must be resolved before approval.</InlineAlert>}
     <StatStrip items={[
-      { icon: CalendarCheck, value: breakdown.duties.toFixed(2), label: "Approved duties", note: "Across all sites" },
-      { icon: Wallet, value: rupees(breakdown.gross), label: "Allocated gross", note: "Resolved duty rates", tone: "green" },
-      { icon: ShieldCheck, value: rupees(breakdown.pf), label: "Employee PF", note: "Eligible site earnings" },
-      { icon: ShieldCheck, value: rupees(breakdown.esi), label: "Employee ESI", note: "Eligible site earnings" },
+      { icon: CalendarCheck, value: breakdown.duties.toFixed(2), label: "Approved duties", note: "Across all sites", onClick: () => onNavigate?.("attendance"), actionLabel: "Open attendance" },
+      { icon: Wallet, value: rupees(breakdown.gross), label: "Allocated gross", note: "Resolved duty rates", tone: "green", onClick: onBack, actionLabel: "Back to the payroll register" },
+      { icon: ShieldCheck, value: rupees(breakdown.pf), label: "Employee PF", note: "Eligible site earnings", onClick: () => onNavigate?.("reports", { report: "Statutory contributions" }), actionLabel: "Open the statutory contributions report" },
+      { icon: ShieldCheck, value: rupees(breakdown.esi), label: "Employee ESI", note: "Eligible site earnings", onClick: () => onNavigate?.("settings", { settingsGroup: "PF and ESI" }), actionLabel: "Open PF and ESI settings" },
     ]} />
     <Panel title="Site allocation" description="Earnings and contributions use the rule effective on each approved duty." flush>
       <div className="overflow-x-auto">
@@ -572,19 +619,18 @@ export function PayrollAllocationScreen({ employeeId: selectedEmployeeId, onBack
 
 /* ------------------------------ Night checks ------------------------------- */
 
+/** The guard app demo signs in as the guard whose check is due now. */
+const GUARD_NIGHT_CHECK_ID = "BMG-1932";
+
 export function NightVigilanceScreen({ onBack, guardMode = false }: { onBack: () => void; guardMode?: boolean }) {
   const notify = useToast();
   const [interval, setIntervalValue] = useState("60 minutes");
-  const [checks, setChecks] = useState([
-    { employee: "Rajeev Kumar", site: "TCS Technopark", due: "22:00", state: "Confirmed" },
-    { employee: "Anzar M", site: "Lake Palace Resort", due: "22:15", state: "Due now" },
-    { employee: "Shamnad C M", site: "Caritas Hospital", due: "22:30", state: "Upcoming" },
-  ]);
-  const confirmPresence = (employee: string) => {
-    setChecks(current => current.map(item => item.employee === employee ? { ...item, state: "Confirmed" } : item));
-    notify(guardMode ? "Presence confirmed" : `Presence recorded for ${employee}`);
+  const { nightChecks: checks, confirmNightCheck } = useOps();
+  const confirmPresence = (check: NightCheck) => {
+    confirmNightCheck(check.empId);
+    notify(guardMode ? "Presence confirmed" : `Presence recorded for ${check.employee}`);
   };
-  const visible = guardMode ? checks.slice(1, 2) : checks;
+  const visible = guardMode ? checks.filter(item => item.empId === GUARD_NIGHT_CHECK_ID) : checks;
 
   return <>
     {guardMode
@@ -605,7 +651,7 @@ export function NightVigilanceScreen({ onBack, guardMode = false }: { onBack: ()
         <div className="flex items-start gap-3">
           <IconTile icon={Clock} />
           <div>
-            <strong className="block text-sm">One tap and a location sample</strong>
+            <strong className="block text-sm font-medium">One tap and a location sample</strong>
             <p className="mt-1 text-sm text-muted">The app records the time, approximate location, device and how quickly the guard responded, using minimal mobile data.</p>
           </div>
         </div>
@@ -614,11 +660,11 @@ export function NightVigilanceScreen({ onBack, guardMode = false }: { onBack: ()
     <Panel title={guardMode ? "Current check" : "Live check-in board"} description={guardMode ? "Confirm while you are at your assigned post." : "Missed checks become attendance exceptions and vacancy risks."}>
       {visible.length === 0 && <p className="text-sm text-muted">No checks due right now.</p>}
       {visible.map(item => (
-        <ListRow key={item.employee}>
-          <div className="min-w-0 flex-1"><PersonCell name={item.employee} id={item.site} /></div>
+        <ListRow key={item.empId}>
+          <div className="min-w-0 flex-1"><PersonCell name={item.employee} id={item.site} phone={guardMode ? undefined : phoneOf(item.empId)} /></div>
           <span className="text-sm"><strong className="block tabular-nums">{item.due}</strong><small className="text-xs text-muted">Due</small></span>
-          <StatusChip tone={item.state === "Confirmed" ? "success" : item.state === "Due now" ? "warning" : "neutral"}>{item.state}</StatusChip>
-          <Button size="sm" variant={item.state === "Confirmed" ? "outline" : "default"} disabled={item.state === "Confirmed"} onClick={() => confirmPresence(item.employee)}>
+          <StatusChip tone={item.state === "Confirmed" ? "success" : item.state === "Missed" ? "danger" : item.state === "Due now" ? "warning" : "neutral"}>{item.state}</StatusChip>
+          <Button size="sm" variant={item.state === "Confirmed" ? "outline" : "default"} disabled={item.state === "Confirmed"} onClick={() => confirmPresence(item)}>
             {item.state === "Confirmed" ? <><CheckCircle2 />Confirmed</> : <><Crosshair />{guardMode ? "I'm at my post" : "Mark present"}</>}
           </Button>
         </ListRow>
@@ -715,7 +761,7 @@ export function ExitClearanceScreen() {
           const due = item.uniform + item.advance + item.penalty;
           return (
             <ListRow key={item.id} onClick={() => selectRecord(item.id)} active={selectedId === item.id}>
-              <div className="min-w-0 flex-1"><PersonCell name={item.name} id={item.id} /></div>
+              <div className="min-w-0 flex-1"><PersonCell name={item.name} id={item.id} phone={phoneOf(item.id)} /></div>
               <span className="text-xs text-muted">{due > 0 ? `${rupees(due)} due` : "No dues"}</span>
               <StatusChip tone={due > 0 ? "danger" : "success"}>{due > 0 ? "Dues pending" : "Ready"}</StatusChip>
             </ListRow>
@@ -844,7 +890,7 @@ export function PenaltiesScreen({ onBack }: { onBack: () => void }) {
           { name: "Anzar M", id: "BMG-2031", status: "Recovered", tone: "neutral" as const, ref: "CMP-26069" },
         ].map(row => (
           <ListRow key={row.id}>
-            <div className="min-w-0 flex-1"><PersonCell name={row.name} id={row.id} /></div>
+            <div className="min-w-0 flex-1"><PersonCell name={row.name} id={row.id} phone={phoneOf(row.id)} /></div>
             <StatusChip tone={row.tone}>{row.status}</StatusChip>
             <span className="text-right text-xs text-muted">{row.ref}<strong className="block text-sm text-foreground">₹500</strong></span>
           </ListRow>
@@ -890,22 +936,22 @@ export function ActionCentreScreen({ onOpen }: { onOpen: (view: string) => void 
   return <>
     <PageHeader title={NAV.actionCentre} subtitle="Vacancies, attendance exceptions, payroll blockers and complaint SLAs, most urgent first." />
     <StatStrip items={[
-      { icon: AlertTriangle, value: String(items.length), label: "Open actions", note: "Sorted by urgency", tone: items.length ? "orange" : "green" },
-      { icon: Building2, value: "3", label: "Vacancy risks", note: "Two relievers available", tone: "red" },
-      { icon: CalendarCheck, value: "7", label: "Attendance reviews", note: "Six GPS-related" },
-      { icon: Clock, value: "1", label: "SLAs due today", note: "Complaints" },
+      { icon: AlertTriangle, value: String(items.length), label: "Open actions", note: "Sorted by urgency", tone: items.length ? "orange" : "green", onClick: () => document.getElementById("action-queue")?.scrollIntoView({ behavior: "smooth", block: "start" }), actionLabel: "Jump to the priority queue" },
+      { icon: Building2, value: "3", label: "Vacancy risks", note: "Two relievers available", tone: "red", onClick: () => onOpen("deployment"), actionLabel: "Open deployment to fill vacant posts" },
+      { icon: CalendarCheck, value: "7", label: "Attendance reviews", note: "Six GPS-related", onClick: () => onOpen("attendance"), actionLabel: "Review attendance" },
+      { icon: Clock, value: "1", label: "SLAs due today", note: "Complaints", onClick: () => onOpen("complaints"), actionLabel: "Open complaints due today" },
     ]} />
-    <Panel title="Priority queue" description="Open an item to resolve it on its own screen.">
+    <div id="action-queue" className="scroll-mt-4"><Panel title="Priority queue" description="Open an item to resolve it on its own screen.">
       {items.length === 0 && <p className="py-6 text-center text-sm text-muted">Nothing needs action right now.</p>}
       {items.map(item => (
         <ListRow key={item.id}>
           <IconTile icon={item.icon} tone={item.urgent ? "danger" : "warn"} />
-          <div className="min-w-0 flex-1"><strong className="block text-sm">{item.title}</strong><small className="text-xs text-muted">{item.owner} · due {item.due}</small></div>
+          <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{item.title}</strong><small className="text-xs text-muted">{item.owner} · due {item.due}</small></div>
           <StatusChip tone={item.urgent ? "danger" : "warning"}>{item.type}</StatusChip>
           <Button size="sm" variant="outline" onClick={() => onOpen(item.target)}>Open</Button>
         </ListRow>
       ))}
-    </Panel>
+    </Panel></div>
   </>;
 }
 
@@ -1093,7 +1139,7 @@ function Card({ title, icon: Icon, children }: { title: string; icon: typeof Use
     <section className="min-w-0 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5" data-enter>
       <div className="mb-5 flex items-center gap-3">
         <IconTile icon={Icon} />
-        <div><strong className="block text-sm">{title}</strong><small className="text-xs text-muted">Fields marked * are required.</small></div>
+        <div><strong className="block text-sm font-medium">{title}</strong><small className="text-xs text-muted">Fields marked * are required.</small></div>
       </div>
       {children}
     </section>

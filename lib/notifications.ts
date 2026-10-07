@@ -86,7 +86,7 @@ export function deriveNotifications(input: NotificationInput): AppNotification[]
       title: `Site document updated · ${edit.site}`,
       detail: `${edit.title} edited on ${edit.updatedOn} — review with your next visit`,
       audience: ["Field Officer"],
-      targetView: "sops", at: edit.updatedOn,
+      targetView: "site-detail", targetSite: edit.site, at: edit.updatedOn,
     });
   }
 

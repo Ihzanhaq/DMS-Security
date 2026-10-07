@@ -20,6 +20,7 @@ import { EmployeeSalaryBreakdownModal } from "@/features/payroll/employee-salary
 import { downloadCsv } from "@/lib/download";
 import { formatAppDate } from "@/lib/app-date";
 import { NAV } from "@/lib/labels";
+import type { NavClickMeta } from "@/lib/nav-config";
 
 const stages = ["Attendance", "Calculation", "Review", "Approval", "Payment"] as const;
 
@@ -42,54 +43,63 @@ const advanceLabels = [
 type PayrollRow = { employee: typeof employees[number]; breakdown: ReturnType<ReturnType<typeof usePayroll>["getBreakdown"]> };
 type Totals = { gross: number; statutory: number; other: number; net: number };
 
-function PayrollStageStats({ stage, rows, totals, exceptions, paid }: { stage: number; rows: PayrollRow[]; totals: Totals; exceptions: number; paid: boolean }) {
+type RowFilter = "ready" | "issues" | null;
+type Navigate = (view: string, meta?: string | NavClickMeta) => void;
+
+function PayrollStageStats({ stage, rows, totals, exceptions, paid, filter, onFilter, onStage, onNavigate }: {
+  stage: number; rows: PayrollRow[]; totals: Totals; exceptions: number; paid: boolean; filter: RowFilter; onFilter: (filter: RowFilter) => void; onStage: (stage: number) => void; onNavigate?: Navigate;
+}) {
   const dutyTotal = rows.reduce((sum, row) => sum + row.breakdown.duties, 0);
   const readyCount = rows.filter(row => row.breakdown.exceptions.length === 0).length;
   const reviewCount = rows.length - readyCount;
+  const toggle = (next: Exclude<RowFilter, null>) => ({ onClick: () => onFilter(filter === next ? null : next), active: filter === next });
+  const go = (view: string, meta?: NavClickMeta) => () => onNavigate?.(view, meta);
 
   if (stage === 0) return <StatStrip items={[
-    { icon: CalendarCheck, value: dutyTotal.toFixed(2), label: "Approved duties", note: "Across payable employees" },
-    { icon: Wallet, value: String(rows.length), label: "Employees in run", note: "With approved attendance" },
-    { icon: AlertTriangle, value: String(lateAndAbsent.length), label: "Attendance flags", note: "Late or absent today", tone: "orange" },
-    { icon: CheckCircle2, value: "Locked", label: "Period", note: "August 2026 duties", tone: "green" },
+    { icon: CalendarCheck, value: dutyTotal.toFixed(2), label: "Approved duties", note: "Across payable employees", onClick: go("reports", { report: "Attendance summary" }), actionLabel: "Open the attendance summary report" },
+    { icon: Wallet, value: String(rows.length), label: "Employees in run", note: "With approved attendance", onClick: go("workforce"), actionLabel: "Open the workforce list" },
+    { icon: AlertTriangle, value: String(lateAndAbsent.length), label: "Attendance flags", note: "Late or absent today", tone: "orange", onClick: go("attendance"), actionLabel: "Review flagged attendance" },
+    { icon: CheckCircle2, value: "Locked", label: "Period", note: "August 2026 duties", tone: "green", onClick: () => onStage(1), actionLabel: "Go to the calculation stage" },
   ]} />;
 
   if (stage === 1) return <StatStrip items={[
-    { icon: Wallet, value: rupees(totals.gross), label: "Calculated gross", note: "From resolved duty rates" },
-    { icon: ShieldCheck, value: String(rows.reduce((sum, row) => sum + row.breakdown.sites.length, 0)), label: "Site allocations", note: "Across all employees" },
-    { icon: Receipt, value: rupees(totals.other), label: "Deductions loaded", note: "Advance, uniform, penalty", tone: "orange" },
-    { icon: AlertTriangle, value: String(exceptions), label: "Setup exceptions", note: exceptions ? "Needs correction" : "All rules resolved", tone: exceptions ? "red" : "green" },
+    { icon: Wallet, value: rupees(totals.gross), label: "Calculated gross", note: "From resolved duty rates", onClick: () => onStage(2), actionLabel: "Go to the review stage" },
+    { icon: ShieldCheck, value: String(rows.reduce((sum, row) => sum + row.breakdown.sites.length, 0)), label: "Site allocations", note: "Across all employees", onClick: go("payroll-allocation"), actionLabel: "Open the multi-site allocation audit" },
+    { icon: Receipt, value: rupees(totals.other), label: "Deductions loaded", note: "Advance, uniform, penalty", tone: "orange", onClick: go("reports", { report: "Deduction log" }), actionLabel: "Open the deduction log report" },
+    { icon: AlertTriangle, value: String(exceptions), label: "Setup exceptions", note: exceptions ? "Needs correction" : "All rules resolved", tone: exceptions ? "red" : "green", ...toggle("issues"), actionLabel: "Show employees with exceptions" },
   ]} />;
 
   if (stage === 3) return <StatStrip items={[
-    { icon: CheckCircle2, value: String(readyCount), label: "Ready to approve", note: "No blocking exceptions", tone: "green" },
-    { icon: AlertTriangle, value: String(reviewCount), label: "On hold", note: reviewCount ? "Resolve before approval" : "All clear", tone: reviewCount ? "orange" : "green" },
-    { icon: Wallet, value: rupees(totals.net), label: "Net payable", note: `${rows.length} employees` },
-    { icon: ShieldCheck, value: rupees(totals.statutory), label: "PF and ESI", note: "Employee contributions" },
+    { icon: CheckCircle2, value: String(readyCount), label: "Ready to approve", note: "No blocking exceptions", tone: "green", ...toggle("ready"), actionLabel: "Show employees ready to approve" },
+    { icon: AlertTriangle, value: String(reviewCount), label: "On hold", note: reviewCount ? "Resolve before approval" : "All clear", tone: reviewCount ? "orange" : "green", ...toggle("issues"), actionLabel: "Show employees on hold" },
+    { icon: Wallet, value: rupees(totals.net), label: "Net payable", note: `${rows.length} employees`, onClick: go("reports", { report: "Net payout register" }), actionLabel: "Open the net payout register" },
+    { icon: ShieldCheck, value: rupees(totals.statutory), label: "PF and ESI", note: "Employee contributions", onClick: go("reports", { report: "Statutory contributions" }), actionLabel: "Open the statutory contributions report" },
   ]} />;
 
   if (stage === 4) return <StatStrip items={[
-    { icon: Wallet, value: rupees(totals.net), label: "Payment batch", note: paid ? "Locked" : "Awaiting release" },
-    { icon: CheckCircle2, value: String(rows.length), label: "Employees", note: "In August 2026", tone: paid ? "green" : "orange" },
-    { icon: Receipt, value: rupees(totals.other), label: "Other deductions", note: "Already netted off" },
-    { icon: ShieldCheck, value: paid ? "Closed" : "Open", label: "Payroll period", note: paid ? "Calculations locked" : "Ready to mark paid", tone: paid ? "green" : undefined },
+    { icon: Wallet, value: rupees(totals.net), label: "Payment batch", note: paid ? "Locked" : "Awaiting release", onClick: go("reports", { report: "Net payout register" }), actionLabel: "Open the net payout register" },
+    { icon: CheckCircle2, value: String(rows.length), label: "Employees", note: "In August 2026", tone: paid ? "green" : "orange", onClick: go("workforce"), actionLabel: "Open the workforce list" },
+    { icon: Receipt, value: rupees(totals.other), label: "Other deductions", note: "Already netted off", onClick: go("penalties"), actionLabel: "Open penalties and deductions" },
+    { icon: ShieldCheck, value: paid ? "Closed" : "Open", label: "Payroll period", note: paid ? "Calculations locked" : "Ready to mark paid", tone: paid ? "green" : undefined, onClick: go("payroll-allocation"), actionLabel: "Open the allocation audit trail" },
   ]} />;
 
   return <StatStrip items={[
-    { icon: Wallet, value: rupees(totals.gross), label: "Gross payroll", note: `${rows.length} employees` },
-    { icon: ShieldCheck, value: rupees(totals.statutory), label: "PF and ESI", note: "Eligible site earnings" },
-    { icon: Receipt, value: rupees(totals.other), label: "Other deductions", note: "Advance, uniform, penalty", tone: "orange" },
-    { icon: AlertTriangle, value: String(exceptions), label: "Exceptions", note: exceptions ? "Blocking approval" : "Ready for approval", tone: exceptions ? "red" : "green" },
+    { icon: Wallet, value: rupees(totals.gross), label: "Gross payroll", note: `${rows.length} employees`, onClick: go("reports", { report: "Net payout register" }), actionLabel: "Open the net payout register" },
+    { icon: ShieldCheck, value: rupees(totals.statutory), label: "PF and ESI", note: "Eligible site earnings", onClick: go("reports", { report: "Statutory contributions" }), actionLabel: "Open the statutory contributions report" },
+    { icon: Receipt, value: rupees(totals.other), label: "Other deductions", note: "Advance, uniform, penalty", tone: "orange", onClick: go("penalties"), actionLabel: "Open penalties and deductions" },
+    { icon: AlertTriangle, value: String(exceptions), label: "Exceptions", note: exceptions ? "Blocking approval" : "Ready for approval", tone: exceptions ? "red" : "green", ...toggle("issues"), actionLabel: "Show employees with exceptions" },
   ]} />;
 }
 
-const person: Column<PayrollRow> = { header: "Employee", cell: row => <PersonCell name={row.employee.name} id={row.employee.id} /> };
+const person: Column<PayrollRow> = { header: "Employee", cell: row => <PersonCell name={row.employee.name} id={row.employee.id} phone={row.employee.phone} /> };
 const statusCell = (ok: boolean, okLabel: string, badLabel: string) => <StatusChip tone={ok ? "success" : "warning"}>{ok ? okLabel : badLabel}</StatusChip>;
 
-function PayrollStagePanel({ stage, rows, totals, exceptions, paid, onOpenEmployee }: {
-  stage: number; rows: PayrollRow[]; totals: Totals; exceptions: number; paid: boolean; onOpenEmployee: (employee: { id: string; name: string }) => void;
+function PayrollStagePanel({ stage, rows, totals, exceptions, paid, filter, onOpenEmployee }: {
+  stage: number; rows: PayrollRow[]; totals: Totals; exceptions: number; paid: boolean; filter: RowFilter; onOpenEmployee: (employee: { id: string; name: string }) => void;
 }) {
   const open = (row: PayrollRow) => onOpenEmployee({ id: row.employee.id, name: row.employee.name });
+  const shown = filter ? rows.filter(row => (row.breakdown.exceptions.length > 0) === (filter === "issues")) : rows;
+  const noMatch = <div className="p-4"><EmptyState icon={CheckCircle2} message="No employees match this filter." /></div>;
 
   if (stage === 0) return (
     <Panel title="Attendance lock" description="Only approved August 2026 duties move into the salary calculation." flush>
@@ -105,7 +115,7 @@ function PayrollStagePanel({ stage, rows, totals, exceptions, paid, onOpenEmploy
 
   if (stage === 1) return (
     <Panel title="Salary calculation" description="Each duty resolves a rate source, benefit scheme and gross amount. Select a row for details." flush>
-      <DataTable rows={rows} rowKey={row => row.employee.id} onRowClick={open} columns={[
+      <DataTable rows={shown} rowKey={row => row.employee.id} onRowClick={open} empty={noMatch} columns={[
         person,
         { header: "Pay basis", cell: row => payBasisLabel(row.breakdown.payBasis) },
         { header: "Duties", align: "right", cell: row => row.breakdown.duties.toFixed(2) },
@@ -121,12 +131,12 @@ function PayrollStagePanel({ stage, rows, totals, exceptions, paid, onOpenEmploy
     const blocked = rows.filter(row => row.breakdown.exceptions.length > 0);
     return <div className="grid gap-4">
       {blocked.length > 0 && <InlineAlert tone="danger">
-        <strong className="block">{blocked.length} employee{blocked.length === 1 ? " is" : "s are"} blocking approval</strong>
+        <strong className="block font-medium">{blocked.length} employee{blocked.length === 1 ? " is" : "s are"} blocking approval</strong>
         <ul className="mt-1 list-disc pl-4">{blocked.map(row => <li key={row.employee.id}>{row.employee.name}: {row.breakdown.exceptions[0]?.message}</li>)}</ul>
       </InlineAlert>}
       <SplitLayout wideFirst className="mb-0">
         <Panel title="Employee readiness" description={exceptions ? "Resolve every setup exception before approving." : "Every employee is ready for approval."} flush>
-          <DataTable rows={rows} rowKey={row => row.employee.id} onRowClick={open} columns={[
+          <DataTable rows={shown} rowKey={row => row.employee.id} onRowClick={open} empty={noMatch} columns={[
             person,
             { header: "Net", align: "right", cell: row => <strong>{rupees(row.breakdown.net)}</strong> },
             { header: "Exceptions", align: "right", cell: row => row.breakdown.exceptions.length },
@@ -162,7 +172,7 @@ function PayrollStagePanel({ stage, rows, totals, exceptions, paid, onOpenEmploy
 
   return (
     <Panel title="Payroll review" description="Select an employee to see site-wise duties, deductions and allocation." flush>
-      <DataTable rows={rows} rowKey={row => row.employee.id} onRowClick={open} columns={[
+      <DataTable rows={shown} rowKey={row => row.employee.id} onRowClick={open} empty={noMatch} columns={[
         person,
         { header: "Duties", align: "right", cell: row => row.breakdown.duties.toFixed(2) },
         { header: "Gross", align: "right", cell: row => rupees(row.breakdown.gross) },
@@ -176,7 +186,7 @@ function PayrollStagePanel({ stage, rows, totals, exceptions, paid, onOpenEmploy
   );
 }
 
-export function PayrollScreen({ onAllocation }: { onAllocation: (employeeId: string) => void }) {
+export function PayrollScreen({ onAllocation, onNavigate }: { onAllocation: (employeeId: string) => void; onNavigate?: Navigate }) {
   const notify = useToast();
   const confirm = useConfirm();
   const { getBreakdown, closePeriod, isPeriodClosed } = usePayroll();
@@ -187,6 +197,8 @@ export function PayrollScreen({ onAllocation }: { onAllocation: (employeeId: str
   const stage = paid ? 4 : chosenStage;
   const maxStage = paid ? 4 : reachedStage;
   const [modalEmployee, setModalEmployee] = useState<{ id: string; name: string } | null>(null);
+  const [filter, setFilter] = useState<RowFilter>(null);
+  const goToStage = (index: number) => { if (index <= maxStage) { setStage(index); setFilter(null); } };
   const exceptions = rows.reduce((sum, row) => sum + row.breakdown.exceptions.length, 0);
   const totals = rows.reduce((result, row) => ({
     gross: result.gross + row.breakdown.gross,
@@ -199,6 +211,7 @@ export function PayrollScreen({ onAllocation }: { onAllocation: (employeeId: str
     if (stage < 4) {
       const next = stage + 1;
       setStage(next);
+      setFilter(null);
       setMaxStage(current => Math.max(current, next));
       notify(`Moved to ${stages[next].toLowerCase()}`);
       return;
@@ -232,9 +245,9 @@ export function PayrollScreen({ onAllocation }: { onAllocation: (employeeId: str
       </>}
     />
     {paid && <InlineAlert tone="success" className="mb-4">August 2026 payroll is closed. Employee calculations are locked.</InlineAlert>}
-    <Stepper steps={stages} current={stage} maxReached={maxStage} onSelect={index => { if (index <= maxStage) setStage(index); }} />
-    <PayrollStageStats stage={stage} rows={rows} totals={totals} exceptions={exceptions} paid={paid} />
-    <PayrollStagePanel stage={stage} rows={rows} totals={totals} exceptions={exceptions} paid={paid} onOpenEmployee={setModalEmployee} />
+    <Stepper steps={stages} current={stage} maxReached={maxStage} onSelect={goToStage} />
+    <PayrollStageStats stage={stage} rows={rows} totals={totals} exceptions={exceptions} paid={paid} filter={filter} onFilter={setFilter} onStage={goToStage} onNavigate={onNavigate} />
+    <PayrollStagePanel stage={stage} rows={rows} totals={totals} exceptions={exceptions} paid={paid} filter={filter} onOpenEmployee={setModalEmployee} />
     {modalEmployee && <EmployeeSalaryBreakdownModal employeeId={modalEmployee.id} employeeName={modalEmployee.name} onClose={() => setModalEmployee(null)} onAllocation={employeeId => { setModalEmployee(null); onAllocation(employeeId); }} />}
   </>;
 }
@@ -244,7 +257,7 @@ export function PayrollScreen({ onAllocation }: { onAllocation: (employeeId: str
 type AdvanceRow = { name: string; id: string; earned: number; deductions: number; eligible: number; requested: number; state: string };
 const advanceTone = (state: string): StatusTone => state === "Approved" ? "success" : state === "Pending" ? "warning" : "danger";
 
-export function AdvancesScreen({ onCreate }: { onCreate: () => void }) {
+export function AdvancesScreen({ onCreate, onNavigate }: { onCreate: () => void; onNavigate?: Navigate }) {
   const notify = useToast();
   const confirm = useConfirm();
   const { getBreakdown } = usePayroll();
@@ -266,6 +279,8 @@ export function AdvancesScreen({ onCreate }: { onCreate: () => void }) {
   const pending = rows.filter(row => row.state === "Pending");
   const approved = rows.filter(row => row.state === "Approved");
   const overLimit = rows.filter(row => row.state === "Over limit");
+  const [stateFilter, setStateFilter] = useState<string | null>(null);
+  const toggle = (state: string) => ({ onClick: () => setStateFilter(current => current === state ? null : state), active: stateFilter === state });
 
   async function decide(row: AdvanceRow, state: "Approved" | "Rejected") {
     if (state === "Rejected" && !await confirm({ title: `Reject ${row.name}'s advance?`, description: `The ${rupees(row.requested)} request will be declined and the employee notified in the app.`, confirmLabel: "Reject request", destructive: true })) return;
@@ -278,16 +293,16 @@ export function AdvancesScreen({ onCreate }: { onCreate: () => void }) {
     <PageHeader title="Salary advances" subtitle="An employee can take up to 40% of what they've earned this month, after deductions."
       actions={<Button onClick={onCreate}><Plus />New advance</Button>} />
     <StatStrip items={[
-      { icon: Coins, value: String(pending.length), label: "Awaiting decision", note: `${rupees(pending.reduce((sum, row) => sum + row.requested, 0))} requested`, tone: pending.length ? "orange" : "green" },
-      { icon: CheckCircle2, value: String(approved.length), label: "Approved", note: `${rupees(approved.reduce((sum, row) => sum + row.requested, 0))} this month`, tone: "green" },
-      { icon: AlertTriangle, value: String(overLimit.length), label: "Over the limit", note: "Amount must be reduced", tone: overLimit.length ? "red" : "green" },
-      { icon: Wallet, value: "₹2.84L", label: "Outstanding", note: "Across 74 employees" },
+      { icon: Coins, value: String(pending.length), label: "Awaiting decision", note: `${rupees(pending.reduce((sum, row) => sum + row.requested, 0))} requested`, tone: pending.length ? "orange" : "green", ...toggle("Pending"), actionLabel: "Show requests awaiting a decision" },
+      { icon: CheckCircle2, value: String(approved.length), label: "Approved", note: `${rupees(approved.reduce((sum, row) => sum + row.requested, 0))} this month`, tone: "green", ...toggle("Approved"), actionLabel: "Show approved requests" },
+      { icon: AlertTriangle, value: String(overLimit.length), label: "Over the limit", note: "Amount must be reduced", tone: overLimit.length ? "red" : "green", ...toggle("Over limit"), actionLabel: "Show requests over the limit" },
+      { icon: Wallet, value: "₹2.84L", label: "Outstanding", note: "Across 74 employees", onClick: () => onNavigate?.("reports", { report: "Deduction log" }), actionLabel: "Open the deduction log report" },
     ]} />
     <Panel title="Requests" description="Select a request to review it." flush>
-      <DataTable rows={rows} rowKey={row => row.id} onRowClick={setReviewing}
-        empty={<div className="p-4"><EmptyState icon={Coins} message="No advance requests this month." actionLabel="New advance" onAction={onCreate} /></div>}
+      <DataTable rows={stateFilter ? rows.filter(row => row.state === stateFilter) : rows} rowKey={row => row.id} onRowClick={setReviewing}
+        empty={<div className="p-4">{stateFilter ? <EmptyState icon={Coins} message="No requests match this filter." actionLabel="Show all" onAction={() => setStateFilter(null)} /> : <EmptyState icon={Coins} message="No advance requests this month." actionLabel="New advance" onAction={onCreate} />}</div>}
         columns={[
-          { header: "Employee", cell: row => <PersonCell name={row.name} id={row.id} /> },
+          { header: "Employee", cell: row => <PersonCell name={row.name} id={row.id} phone={employees.find(item => item.id === row.id)?.phone} /> },
           { header: "Earned", align: "right", cell: row => rupees(row.earned), hideOnMobile: true },
           { header: "Deductions", align: "right", cell: row => `− ${rupees(row.deductions)}`, hideOnMobile: true },
           { header: "Limit (40%)", align: "right", cell: row => rupees(row.eligible) },
@@ -341,7 +356,7 @@ function AdvanceDrawer({ row, onDecide, onClose }: { row: AdvanceRow; onDecide: 
 
 /* ------------------------------ Spare payments ----------------------------- */
 
-export function SparePaymentsScreen() {
+export function SparePaymentsScreen({ onNavigate }: { onNavigate?: Navigate }) {
   const notify = useToast();
   const confirm = useConfirm();
   const [rows, setRows] = useState<SpareDutyPayment[]>(spareDutyPayments);
@@ -353,17 +368,19 @@ export function SparePaymentsScreen() {
     notify("Transfer recorded · Operations and Finance notified");
   };
   const queued = rows.filter(item => item.status === "queued");
+  const [statusFilter, setStatusFilter] = useState<SpareDutyPayment["status"] | null>(null);
+  const toggle = (status: SpareDutyPayment["status"]) => ({ onClick: () => setStatusFilter(current => current === status ? null : status), active: statusFilter === status });
   return <>
     <PageHeader title={NAV.sparePayments} subtitle="Same-day payments to spare guards for extra duties. Operations in-charge and Finance are notified on every transfer." />
     <StatStrip items={[
-      { icon: Coins, value: String(queued.length), label: "To transfer", note: rupees(queued.reduce((sum, item) => sum + item.amount, 0)), tone: queued.length ? "orange" : "green" },
-      { icon: Wallet, value: rupees(rows.filter(item => item.status === "transferred").reduce((sum, item) => sum + item.amount, 0)), label: "Transferred", note: "This week", tone: "green" },
-      { icon: CheckCircle2, value: String(rows.length), label: "Spare duties", note: "This week" },
-      { icon: ShieldCheck, value: "Ops + Finance", label: "Notified", note: "On every transfer" },
+      { icon: Coins, value: String(queued.length), label: "To transfer", note: rupees(queued.reduce((sum, item) => sum + item.amount, 0)), tone: queued.length ? "orange" : "green", ...toggle("queued"), actionLabel: "Show payments to transfer" },
+      { icon: Wallet, value: rupees(rows.filter(item => item.status === "transferred").reduce((sum, item) => sum + item.amount, 0)), label: "Transferred", note: "This week", tone: "green", ...toggle("transferred"), actionLabel: "Show transferred payments" },
+      { icon: CheckCircle2, value: String(rows.length), label: "Spare duties", note: "This week", onClick: () => onNavigate?.("duty-changes"), actionLabel: "Open duty changes" },
+      { icon: ShieldCheck, value: "Ops + Finance", label: "Notified", note: "On every transfer", onClick: () => onNavigate?.("settings", { settingsGroup: "Notifications" }), actionLabel: "Open notification settings" },
     ]} />
     <Panel title="Payments" flush>
-      <DataTable rows={rows} rowKey={row => row.id}
-        empty={<div className="p-4"><EmptyState icon={Coins} message="No spare duty payments this week." /></div>}
+      <DataTable rows={statusFilter ? rows.filter(row => row.status === statusFilter) : rows} rowKey={row => row.id}
+        empty={<div className="p-4">{statusFilter ? <EmptyState icon={Coins} message="No payments match this filter." actionLabel="Show all" onAction={() => setStatusFilter(null)} /> : <EmptyState icon={Coins} message="No spare duty payments this week." />}</div>}
         columns={[
           { header: "Employee", cell: row => { const employee = employeeOf(row.employeeId); return <PersonCell name={employee?.name ?? row.employeeId} id={row.employeeId} phone={employee?.phone} />; } },
           { header: "Date", cell: row => formatAppDate(row.date) },
@@ -380,8 +397,9 @@ export function SparePaymentsScreen() {
 
 const uniformStatusLabel: Record<UniformRequestStatus, string> = { requested: "Requested", approved: "Approved", dispatched: "Dispatched", delivered: "Delivered" };
 
-export function UniformsScreen({ onIssue, onImport }: { onIssue: () => void; onImport: () => void }) {
+export function UniformsScreen({ onIssue, onImport, onNavigate }: { onIssue: () => void; onImport: () => void; onNavigate?: Navigate }) {
   const notify = useToast();
+  const [requestFilter, setRequestFilter] = useState<UniformRequestStatus | null>(null);
   const [plan, setPlan] = useState<(typeof uniformPlans)[number] | null>(null);
   const [inventoryOpen, setInventoryOpen] = useState(false);
   const [requests, setRequests] = useState<UniformRequest[]>(uniformRequests);
@@ -400,17 +418,17 @@ export function UniformsScreen({ onIssue, onImport }: { onIssue: () => void; onI
     <PageHeader title={NAV.uniforms} subtitle="Kit stock by batch, guard requests, dispatch and salary recovery."
       actions={<><Button variant="outline" onClick={onImport}><Upload />Import balances</Button><Button onClick={onIssue}><Plus />Issue kit</Button></>} />
     <StatStrip items={[
-      { icon: Shirt, value: "76", label: "Kits issued", note: "This quarter" },
-      { icon: Package, value: String(new Set(uniformBatches.map(batch => batch.batchNo)).size), label: "Batches tracked", note: "Stock by size", tone: "green" },
-      { icon: Wallet, value: "₹1.82L", label: "Pending recovery", note: "93 employees", tone: "orange" },
-      { icon: AlertTriangle, value: String(requests.filter(item => item.status === "requested").length), label: "New requests", note: "From the guard app", tone: "red" },
+      { icon: Shirt, value: "76", label: "Kits issued", note: "This quarter", onClick: () => setInventoryOpen(true), actionLabel: "Open uniform kit stock" },
+      { icon: Package, value: String(new Set(uniformBatches.map(batch => batch.batchNo)).size), label: "Batches tracked", note: "Stock by size", tone: "green", onClick: () => setInventoryOpen(true), actionLabel: "Open kit stock by batch" },
+      { icon: Wallet, value: "₹1.82L", label: "Pending recovery", note: "93 employees", tone: "orange", onClick: () => onNavigate?.("reports", { report: "Uniform recovery" }), actionLabel: "Open the uniform recovery report" },
+      { icon: AlertTriangle, value: String(requests.filter(item => item.status === "requested").length), label: "New requests", note: "From the guard app", tone: "red", onClick: () => setRequestFilter(current => current ? null : "requested"), active: requestFilter === "requested", actionLabel: "Show new requests from guards" },
     ]} />
     <SplitLayout>
       <Panel title="Recovery plans" description="The default can be overridden per employee.">
         {uniformPlans.map(item => (
           <ListRow key={item.name} onClick={() => setPlan(item)}>
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald/10 text-emerald"><Shirt className="h-4 w-4" /></span>
-            <div className="min-w-0 flex-1"><strong className="block text-sm">{item.name}</strong><small className="text-xs text-muted">{rupees(item.upfront)} upfront · {rupees(item.deduction)} from salary</small></div>
+            <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{item.name}</strong><small className="text-xs text-muted">{rupees(item.upfront)} upfront · {rupees(item.deduction)} from salary</small></div>
             <span className="text-xs text-muted">{item.people} people</span>
             <ChevronRight className="h-4 w-4 text-muted" />
           </ListRow>
@@ -430,8 +448,8 @@ export function UniformsScreen({ onIssue, onImport }: { onIssue: () => void; onI
       </Panel>
     </SplitLayout>
     <Panel title="Requests from guards" description="Status changes appear in the guard's app immediately." flush>
-      <DataTable rows={requests} rowKey={row => row.id}
-        empty={<div className="p-4"><EmptyState icon={Package} message="No uniform requests from guards." /></div>}
+      <DataTable rows={requestFilter ? requests.filter(row => row.status === requestFilter) : requests} rowKey={row => row.id}
+        empty={<div className="p-4">{requestFilter ? <EmptyState icon={Package} message="No new requests from guards." actionLabel="Show all" onAction={() => setRequestFilter(null)} /> : <EmptyState icon={Package} message="No uniform requests from guards." />}</div>}
         columns={[
           { header: "Employee", cell: row => { const employee = employees.find(item => item.id === row.employeeId); return <PersonCell name={employee?.name ?? row.employeeId} id={row.employeeId} phone={employee?.phone} />; } },
           { header: "Items", cell: row => <span className="font-medium">{row.items.map(item => `${item.item.split(" (")[0]} · ${item.size} ×${item.qty}`).join(", ")}</span> },
@@ -477,7 +495,7 @@ export function UniformsScreen({ onIssue, onImport }: { onIssue: () => void; onI
           const low = item.stock < item.reorder;
           return (
             <div key={item.item} className="rounded-xl border border-border p-3">
-              <strong className="block text-sm">{item.item}</strong>
+              <strong className="block text-sm font-medium">{item.item}</strong>
               <div className="my-1 flex justify-between text-xs text-muted"><span>{item.issued} per kit</span><span className={low ? "font-semibold text-status-danger" : ""}>{item.stock} in stock</span></div>
               <ProgressBar value={Math.min(100, item.stock / 2.8)} tone={low ? "warn" : "emerald"} />
               {batches.length > 0 && <div className="mt-2 grid gap-0.5">{batches.map(batch => <span key={`${batch.batchNo}-${batch.size}`} className="text-[11px] text-muted"><b className="text-foreground">{batch.batchNo}</b> · size {batch.size} · {batch.qty} pcs · {batch.receivedOn}</span>)}</div>}

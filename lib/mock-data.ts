@@ -1,7 +1,7 @@
 import type {
   ApprovedDuty, CustomFieldDef, DutyChangeRequest, Employee, EmployeeDocument,
   EmployeePayRule, ExitRecord, ExportTemplate, FoTask, GuardChangeEvent,
-  PayrollDeduction, PostRateRule, Rating, RecruitmentVacancy, SatisfactionCall,
+  PayrollDeduction, PostRateRule, Rating, NightCheck, RecruitmentVacancy, SatisfactionCall,
   Site, SiteDocument, SiteFeedback, SitePayRule, Skill, SpareDutyPayment,
   StatutorySettings, Ticket, UniformBatch, UniformRequest,
 } from "@/types/domain";
@@ -21,6 +21,9 @@ export const employees: Employee[] = [
   { id:"BMG-2087", name:"Jomon Jose", initials:"JJ", role:"Security Officer", district:"Kannur", site:"Skyline Apartments", shift:"Night", status:"Active", salary:15200, skills:["General security"], pf:false, esi:true, phone:"96334 71589", joiningDate:"2025-08-12", pfEsiDataReceived:true },
   { id:"BMG-1655", name:"Ashraf Ali", initials:"AA", role:"Driver", district:"Thiruvananthapuram", site:"TCS Technopark", shift:"Day", status:"Active", salary:17600, skills:["Driving","General security"], pf:true, esi:true, phone:"94004 61237", joiningDate:"2024-05-27", pfEsiDataReceived:true },
   { id:"BMG-2301", name:"Prasanth V", initials:"PV", role:"Reliever", district:"Thrissur", site:"Unassigned", shift:"Day", status:"Reliever", salary:0, dailyRate:650, skills:["General security","Driving"], pf:false, esi:true, phone:"89432 05517", joiningDate:"2026-09-12", pfEsiDataReceived:false },
+  { id:"BMG-2312", name:"Midhun Raj", initials:"MR", role:"Reliever", district:"Ernakulam", site:"Unassigned", shift:"Day", status:"Reliever", salary:0, dailyRate:650, skills:["General security","Day book"], pf:false, esi:true, phone:"90370 48821", joiningDate:"2025-11-03", pfEsiDataReceived:true },
+  { id:"BMG-2318", name:"Sajeev T", initials:"ST", role:"Reliever", district:"Thiruvananthapuram", site:"Unassigned", shift:"Night", status:"Reliever", salary:0, dailyRate:650, skills:["General security","Driving"], pf:false, esi:true, phone:"94461 30987", joiningDate:"2025-06-21", pfEsiDataReceived:true },
+  { id:"BMG-2325", name:"Joby Mathew", initials:"JM", role:"Reliever", district:"Alappuzha", site:"Unassigned", shift:"Night", status:"Reliever", salary:0, dailyRate:516, skills:["General security"], pf:false, esi:true, phone:"79072 55416", joiningDate:"2026-01-12", pfEsiDataReceived:true },
 ];
 
 /** Fixed reliever day rates. The tier applied depends on site and skill. */
@@ -529,12 +532,29 @@ export const satisfactionCalls: SatisfactionCall[] = [
 export const ratings: Rating[] = [
   { targetType:"employee", targetId:"BMG-1840", score:9, ratedBy:"Ajmal Khan",  on:"2026-09-01" },
   { targetType:"employee", targetId:"BMG-2031", score:5, ratedBy:"Nithin Joseph", on:"2026-09-01" },
+  { targetType:"employee", targetId:"BMG-2118", score:8, ratedBy:"HR desk", on:"2026-09-10" },
+  { targetType:"employee", targetId:"BMG-2312", score:9, ratedBy:"HR desk", on:"2026-09-12" },
+  { targetType:"employee", targetId:"BMG-2260", score:7, ratedBy:"HR desk", on:"2026-09-08" },
+  { targetType:"employee", targetId:"BMG-2325", score:8, ratedBy:"HR desk", on:"2026-09-15" },
+  { targetType:"employee", targetId:"BMG-2295", score:6, ratedBy:"HR desk", on:"2026-09-05" },
+  { targetType:"employee", targetId:"BMG-2318", score:9, ratedBy:"HR desk", on:"2026-09-11" },
+  { targetType:"employee", targetId:"BMG-1469", score:8, ratedBy:"HR desk", on:"2026-09-03" },
   { targetType:"site",     targetId:"Lulu Mall, Kochi", score:9, ratedBy:"Meera Nair", on:"2026-09-01" },
   { targetType:"site",     targetId:"Skyline Apartments", score:6, ratedBy:"Nithin Joseph", on:"2026-09-01" },
 ];
 
 export const exitRecords: ExitRecord[] = [
   { id:"EXIT-1", employeeId:"BMG-2031", date:"2026-09-14", time:"18:00", reason:"Personal — relocating", adjustments:"Final salary + leave encashment", priority:"high", assetsCleared:false, financeCleared:false },
+];
+
+export const nightChecks: NightCheck[] = [
+  { employee: "Anzar M", empId: "BMG-1932", site: "Lake Palace Resort", due: "22:15", state: "Due now" },
+  { employee: "Shamnad C M", empId: "BMG-1778", site: "Caritas Hospital", due: "22:30", state: "Upcoming" },
+  { employee: "Rajeev Kumar", empId: "BMG-1204", site: "TCS Technopark", due: "22:30", state: "Upcoming" },
+  { employee: "Fathima N", empId: "BMG-2274", site: "Aster Medcity", due: "22:40", state: "Upcoming" },
+  { employee: "Biju Thomas", empId: "BMG-1411", site: "Lulu Mall Kochi", due: "22:45", state: "Upcoming" },
+  { employee: "Suresh P", empId: "BMG-1650", site: "Infopark Phase 2", due: "21:45", state: "Missed" },
+  { employee: "Manoj K", empId: "BMG-1588", site: "Kochi Metro Depot", due: "21:30", state: "Confirmed" },
 ];
 
 export const recruitmentVacancies: RecruitmentVacancy[] = [

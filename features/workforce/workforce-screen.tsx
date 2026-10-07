@@ -2,10 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { LogOut, Pencil, Plus, Upload, UserCheck, UserMinus, Users } from "lucide-react";
-import { employees, ratings, relieverRates, rupees, skillOptions } from "@/lib/mock-data";
+import { employees, relieverRates, rupees, skillOptions } from "@/lib/mock-data";
+import { useOps } from "@/components/shared/ops-context";
+import { averageRating } from "@/lib/ratings";
+import { EmployeeRatingsPanel } from "./employee-ratings";
 import {
-  Button, DataTable, DefRows, DetailDrawer, EmptyState, FilterChips, ListFilterRow, PageHeader, Panel, PersonCell,
-  SearchBar, Section, Select, SkillTags, StatStrip, StatusChip, type StatusTone,
+  BackCrumb, Button, CallButton, DataTable, DefRows, EmptyState, FilterChips, ListFilterRow, PageHeader, Panel, PersonCell,
+  SearchBar, Select, SkillTags, StatStrip, StatusChip, type StatusTone,
 } from "@/components/ui-kit";
 import { usePayroll } from "@/components/shared/payroll-context";
 import { payBasisLabel } from "@/lib/payroll-calculator";
@@ -24,11 +27,9 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate: 
   const [skill, setSkill] = useState("all");
   const [selected, setSelected] = useState<Employee | null>(null);
   const { employeeRules } = usePayroll();
+  const { ratings } = useOps();
   const ruleFor = (employeeId: string) => employeeRules.filter(rule => rule.employeeId === employeeId).sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
-  const ratingFor = (employeeId: string) => {
-    const scores = ratings.filter(rating => rating.targetType === "employee" && rating.targetId === employeeId).map(rating => rating.score);
-    return scores.length ? Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length * 10) / 10 : null;
-  };
+  const ratingFor = (employeeId: string) => averageRating(ratings, "employee", employeeId);
   const payLabel = (employee: Employee) => {
     const rule = ruleFor(employee.id);
     return rule?.basis === "site" ? "Site-wise rate" : rule?.basis === "daily" ? `${rupees(rule.dailyRate ?? 0)} / duty` : rupees(rule?.monthlySalary ?? employee.salary);
@@ -47,14 +48,59 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate: 
   const filtered = status !== "all" || skill !== "all" || query;
   const reset = () => { setStatus("all"); setSkill("all"); setQuery(""); };
 
+  if (selected) {
+    const rule = ruleFor(selected.id);
+    const rating = ratingFor(selected.id);
+    const rateValue = rule?.basis === "site"
+      ? "Taken from each duty's site"
+      : rupees(rule?.dailyRate ?? rule?.monthlySalary ?? 0);
+    return <>
+      <BackCrumb backLabel={NAV.workforce} onBack={() => setSelected(null)} current={selected.name} />
+      <PageHeader
+        title={selected.name}
+        subtitle={`${selected.id} · ${selected.role}${rating !== null ? ` · ${rating}/10 rating` : ""}`}
+        actions={<><CallButton size="md" phone={selected.phone} name={selected.name} /><Button onClick={() => onEdit(selected.id)}><Pencil />Edit employee</Button></>}
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="Current employment">
+          <DefRows rows={[
+            { label: "Site", value: selected.site },
+            { label: "District", value: selected.district },
+            { label: "Shift", value: selected.shift },
+            { label: "Status", value: <StatusChip tone={statusTone[selected.status]}>{statusLabel[selected.status]}</StatusChip> },
+            { label: "Phone", value: <span className="inline-flex items-center gap-2">{selected.phone}<CallButton phone={selected.phone} name={selected.name} /></span>, mono: true },
+          ]} />
+        </Panel>
+        <Panel title="Skills" description="Skills decide which posts this employee can cover and which reliever rate applies.">
+          <SkillTags skills={selected.skills} />
+        </Panel>
+        <EmployeeRatingsPanel employeeId={selected.id} className="lg:col-span-2" />
+        <Panel title="Pay settings" className="lg:col-span-2">
+          <div className="max-w-xl">
+            <DefRows rows={[
+              { label: "Pay basis", value: payBasisLabel(rule?.basis ?? "monthly") },
+              { label: "Rate", value: rateValue, mono: true },
+              { label: "PF", value: overrideLabel(rule?.pfOverride) },
+              { label: "ESI", value: overrideLabel(rule?.esiOverride) },
+              { label: "Effective from", value: rule?.effectiveFrom ?? "Not set" },
+            ]} />
+          </div>
+        </Panel>
+      </div>
+      <Panel title="Salary breakdown" description="Current period allocation and deductions." className="mt-4">
+        <EmployeeSalaryBreakdown employeeId={selected.id} />
+      </Panel>
+    </>;
+  }
+
   return <>
     <PageHeader title={NAV.workforce} subtitle="Employee records, skills, deployment and pay settings."
       actions={<><Button variant="outline" onClick={() => onNavigate("imports")}><Upload />Import employees</Button><Button onClick={onCreate}><Plus />Add employee</Button></>} />
     <StatStrip items={[
-      { icon: Users, value: "468", label: "Active employees", note: "Across 12 districts" },
-      { icon: UserCheck, value: "421", label: "Deployed now", note: "90% of active staff", tone: "green" },
-      { icon: UserMinus, value: "18", label: "Relievers", note: "Paid per duty" },
-      { icon: LogOut, value: "9", label: "Exits in progress", note: "3 blocked by dues", tone: "orange" },
+      { icon: Users, value: "468", label: "Active employees", note: "Across 12 districts", onClick: () => setStatus(status === "Active" ? "all" : "Active"), actionLabel: "Show active employees", active: status === "Active" },
+      { icon: UserCheck, value: "421", label: "Deployed now", note: "90% of active staff", tone: "green", onClick: () => onNavigate("deployment"), actionLabel: "Open deployment" },
+      { icon: UserMinus, value: "18", label: "Relievers", note: "Paid per duty", onClick: () => setStatus(status === "Reliever" ? "all" : "Reliever"), actionLabel: "Show relievers", active: status === "Reliever" },
+      { icon: LogOut, value: "9", label: "Exits in progress", note: "3 blocked by dues", tone: "orange", onClick: () => onNavigate("exit-clearance"), actionLabel: "Open exit clearance" },
     ]} />
     <SearchBar value={query} onChange={setQuery} placeholder="Search by name, employee ID or site" />
     <ListFilterRow>
@@ -88,32 +134,5 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate: 
         { header: "Relievers", align: "right", cell: tier => rows.filter(employee => employee.dailyRate === tier.rate).length },
       ]} />
     </Panel>}
-
-    {selected && <DetailDrawer wide title={selected.name} subtitle={`${selected.id} · ${selected.role}`} onClose={() => setSelected(null)}
-      footer={<><Button variant="outline" onClick={() => setSelected(null)}>Close</Button><Button onClick={() => onEdit(selected.id)}><Pencil />Edit employee</Button></>}>
-      <Section title="Current employment">
-        <DefRows rows={[
-          { label: "Site", value: selected.site },
-          { label: "District", value: selected.district },
-          { label: "Shift", value: selected.shift },
-          { label: "Status", value: <StatusChip tone={statusTone[selected.status]}>{statusLabel[selected.status]}</StatusChip> },
-          { label: "Phone", value: <a className="text-emerald hover:underline" href={`tel:${selected.phone.replace(/\s/g, "")}`}>{selected.phone}</a>, mono: true },
-        ]} />
-      </Section>
-      <Section title="Skills">
-        <SkillTags skills={selected.skills} />
-        <p className="mt-2 text-xs text-muted">Skills decide which posts this employee can cover and which reliever rate applies.</p>
-      </Section>
-      <Section title="Pay settings">
-        <DefRows rows={[
-          { label: "Pay basis", value: payBasisLabel(ruleFor(selected.id)?.basis ?? "monthly") },
-          { label: "Rate", value: ruleFor(selected.id)?.basis === "site" ? "Taken from each duty's site" : rupees(ruleFor(selected.id)?.dailyRate ?? ruleFor(selected.id)?.monthlySalary ?? 0), mono: true },
-          { label: "PF", value: overrideLabel(ruleFor(selected.id)?.pfOverride) },
-          { label: "ESI", value: overrideLabel(ruleFor(selected.id)?.esiOverride) },
-          { label: "Effective from", value: ruleFor(selected.id)?.effectiveFrom ?? "Not set" },
-        ]} />
-      </Section>
-      <div className="rounded-xl border border-border p-4"><EmployeeSalaryBreakdown employeeId={selected.id} /></div>
-    </DetailDrawer>}
   </>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, LogOut, UserRound } from "lucide-react";
+import { LogOut, UserRound } from "lucide-react";
 import { ACTIONS } from "@/lib/labels";
 import { cn } from "@/lib/utils";
 
@@ -27,17 +27,17 @@ export function UserMenu({
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="flex h-9 items-center gap-2 rounded-xl border border-border bg-card px-2 text-sm"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={current ? `Account: ${current.name}` : "Account"}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-navy text-sm font-semibold text-white shadow-sm ring-offset-2 ring-offset-card transition hover:bg-navy/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-navy text-xs font-bold text-white">
-          {initials}
-        </span>
-        <ChevronDown className="h-4 w-4 text-muted" />
+        {initials}
       </button>
       {open && (
         <>
           <button type="button" className="fixed inset-0 z-40" aria-label="Close menu" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 z-50 mt-2 w-72 rounded-2xl border border-border bg-card p-2 shadow-xl">
+          <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-border bg-card p-2 shadow-xl">
             <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted">{ACTIONS.viewAs}</p>
             <div className="max-h-48 overflow-y-auto">
               {roles.map(role => {

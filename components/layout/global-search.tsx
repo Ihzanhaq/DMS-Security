@@ -80,14 +80,14 @@ export function SearchTrigger({ onClick, className }: { onClick: () => void; cla
     <button
       type="button"
       onClick={onClick}
+      aria-label="Open search"
+      title="Search (Ctrl K)"
       className={cn(
-        "hidden h-9 items-center gap-2 rounded-xl border border-border bg-surface px-3 text-sm text-muted md:flex",
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-muted transition hover:border-emerald hover:text-foreground",
         className,
       )}
     >
       <Search className="h-4 w-4" />
-      <span>Search</span>
-      <kbd className="ml-2 rounded border border-border bg-card px-1.5 text-[10px]">Ctrl K</kbd>
     </button>
   );
 }

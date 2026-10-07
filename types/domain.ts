@@ -13,8 +13,8 @@ export type BenefitScheme = "salary-only" | "esi" | "pf-esi";
 export type AppView =
   | "dashboard" | "workforce" | "sites" | "deployment" | "attendance"
   | "payroll" | "advances" | "uniforms" | "inspections" | "complaints"
-  | "sops" | "reports" | "imports" | "settings"
-  | "employee-form" | "site-config" | "assignment-form" | "attendance-correction"
+  | "reports" | "imports" | "settings"
+  | "employee-form" | "site-config" | "site-detail" | "site-attendance" | "assignment-form" | "attendance-correction"
   | "payroll-allocation" | "night-vigilance" | "uniform-issue" | "exit-clearance"
   | "penalties" | "inspection-form" | "complaint-form" | "sop-form" | "action-centre" | "advance-form"
   | "tickets" | "recruitment" | "hr-quality" | "duty-changes" | "spare-payments" | "analytics" | "access"
@@ -228,6 +228,7 @@ export type SiteDocument = {
   version: string;
   updatedOn: string;
   updatedBy: string;
+  file?: StoredFileMeta;
 };
 
 export type EscalationContact = { label: string; name: string; phone: string };
@@ -257,6 +258,8 @@ export type DutyChangeRequest = {
   hours?: number;
   note: string;
   status: "pending" | "approved" | "rejected";
+  /** Set when the office logged it on the guard's behalf; guard-app requests leave it empty and alert the office. */
+  loggedBy?: "office";
 };
 
 export type FoTaskKind = "sop-briefing" | "client-complaint" | "day-patrol" | "night-patrol" | "guard-change-review";
@@ -333,12 +336,17 @@ export type SatisfactionCall = {
   notes?: string;
 };
 
+/** A kind of rating the organisation collects (HR, client, field officer…). Managed in Settings → Ratings. */
+export type RatingType = { id: string; label: string };
+
 export type Rating = {
   targetType: "employee" | "site";
   targetId: string;
   score: number; // 1–10
   ratedBy: string;
   on: string;
+  /** Rating type id (see RatingType). Missing means HR. Overall = average of each type's latest score. */
+  source?: string;
 };
 
 export type ExitRecord = {
@@ -351,6 +359,15 @@ export type ExitRecord = {
   priority: "high" | "normal";
   assetsCleared: boolean;
   financeCleared: boolean;
+};
+
+/** Night-duty presence check. Missed checks become attendance exceptions. */
+export type NightCheck = {
+  employee: string;
+  empId: string;
+  site: string;
+  due: string;
+  state: "Due now" | "Upcoming" | "Missed" | "Confirmed";
 };
 
 export type RecruitmentVacancy = {
@@ -392,5 +409,7 @@ export type AppNotification = {
   /** Roles that should see it in the bell. */
   audience: Role[];
   targetView: AppView;
+  /** Opens site detail when targetView is site-detail. */
+  targetSite?: string;
   at: string;
 };

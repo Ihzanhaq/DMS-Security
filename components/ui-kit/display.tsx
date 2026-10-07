@@ -4,6 +4,26 @@ import type { ReactNode } from "react";
 import { Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/** One-tap call link: a round phone icon that dials `phone`. Safe inside clickable rows. */
+export function CallButton({ phone, name, size = "sm", className }: { phone: string; name?: string; size?: "sm" | "md"; className?: string }) {
+  const label = name ? `Call ${name} · ${phone}` : `Call ${phone}`;
+  return (
+    <a
+      href={`tel:${phone.replace(/\s/g, "")}`}
+      title={label}
+      aria-label={label}
+      onClick={e => e.stopPropagation()}
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center rounded-full bg-emerald/10 text-emerald transition-colors hover:bg-emerald hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald focus-visible:ring-offset-2 focus-visible:ring-offset-card",
+        size === "md" ? "h-9 w-9" : "h-7 w-7",
+        className,
+      )}
+    >
+      <Phone className={size === "md" ? "h-4 w-4" : "h-3.5 w-3.5"} aria-hidden />
+    </a>
+  );
+}
+
 export function PersonCell({ name, id, phone }: { name: string; id: string; phone?: string }) {
   const initials = name.split(" ").map(part => part[0]).join("").slice(0, 2);
   return (
@@ -15,22 +35,10 @@ export function PersonCell({ name, id, phone }: { name: string; id: string; phon
         <strong className="block text-sm font-medium text-foreground">{name}</strong>
         <small className="text-xs text-muted">
           {id}
-          {phone && (
-            <>
-              {" · "}
-              <a
-                className="inline-flex items-center gap-0.5 text-emerald hover:underline"
-                href={`tel:${phone.replace(/\s/g, "")}`}
-                onClick={e => e.stopPropagation()}
-                aria-label={`Call ${name}`}
-              >
-                <Phone className="h-3 w-3" />
-                {phone}
-              </a>
-            </>
-          )}
+          {phone && <>{" · "}<span className="whitespace-nowrap tabular-nums">{phone}</span></>}
         </small>
       </span>
+      {phone && <CallButton phone={phone} name={name} className="ml-1" />}
     </span>
   );
 }
@@ -86,7 +94,7 @@ export function Timeline({ entries }: { entries: TimelineEntry[] }) {
           )}
         >
           <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-border" />
-          <strong className="block">{entry.title}</strong>
+          <strong className="block font-medium">{entry.title}</strong>
           <small className="text-xs text-muted">{entry.time}</small>
           {entry.note && <p className="mt-1 text-xs text-muted">{entry.note}</p>}
         </li>

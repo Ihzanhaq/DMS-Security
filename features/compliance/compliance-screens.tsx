@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
-  AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, ChevronRight, ClipboardList, Download, FileSpreadsheet,
+  AlertTriangle, ArrowDown, ArrowUp, BellRing, CheckCircle2, ChevronRight, ClipboardList, Download, FileSpreadsheet,
   FileText, Plus, Settings, Upload, Users, X,
 } from "lucide-react";
 import {
@@ -10,6 +10,7 @@ import {
   exportTemplates, lateAndAbsent, payrollRows, rupees, sites, sopDocuments, uniformPlans,
 } from "@/lib/mock-data";
 import { applyTemplate } from "@/lib/export-mapper";
+import { downloadExcel } from "@/lib/download-excel";
 import { downloadCsv } from "@/lib/download";
 import { useOnboarding } from "@/components/shared/onboarding-context";
 import { AddItemRow } from "@/components/shared/add-item-row";
@@ -20,7 +21,16 @@ import {
   StatusChip, Stepper, Textarea, Timeline, ToggleRow, useConfirm, type StatusTone,
 } from "@/components/ui-kit";
 import { useToast } from "@/components/shared/toast-context";
+import { useAccessibilityPreferences } from "@/components/shared/use-accessibility-preferences";
+import { useDesktopAlerts } from "@/components/shared/use-desktop-alerts";
+import { useOps } from "@/components/shared/ops-context";
+import { HR_RATING_TYPE } from "@/lib/ratings";
+import { showDesktopAlert } from "@/lib/browser-notify";
+import { setAccessibilityPreference } from "@/lib/accessibility-preferences";
 import { NAV } from "@/lib/labels";
+import type { NavClickMeta } from "@/lib/nav-config";
+import { DEFAULT_REPORT_NAME, type ReportName } from "@/lib/report-catalog";
+import { type SettingsGroup } from "@/lib/settings-catalog";
 import { cn } from "@/lib/utils";
 
 /* -------------------------------- Complaints ------------------------------- */
@@ -33,16 +43,19 @@ const complaintFilters = [
   { id: "Assigned", label: "Assigned" },
   { id: "Resolved", label: "Resolved" },
 ] as const;
+type ComplaintFilter = (typeof complaintFilters)[number]["id"] | "open" | "high";
 
-export function ComplaintsScreen({ onCreate }: { onCreate: () => void }) {
+export function ComplaintsScreen({ onCreate, onNavigate }: { onCreate: () => void; onNavigate?: (view: string, meta?: string | NavClickMeta) => void }) {
   const notify = useToast();
-  const [filter, setFilter] = useState<(typeof complaintFilters)[number]["id"]>("all");
+  const [filter, setFilter] = useState<ComplaintFilter>("all");
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<Complaint | null>(null);
   const [resolved, setResolved] = useState<string[]>([]);
   const stateOf = (item: Complaint) => resolved.includes(item.id) ? "Resolved" : item.state;
   const q = query.trim().toLowerCase();
-  const rows = complaints.filter(item => (filter === "all" || stateOf(item) === filter)
+  const matchesFilter = (item: Complaint) => filter === "all" || (filter === "open" ? stateOf(item) !== "Resolved" : filter === "high" ? stateOf(item) !== "Resolved" && item.priority === "High" : stateOf(item) === filter);
+  const toggle = (next: ComplaintFilter) => setFilter(current => current === next ? "all" : next);
+  const rows = complaints.filter(item => matchesFilter(item)
     && (!q || [item.id, item.client, item.issue, item.owner].some(value => value.toLowerCase().includes(q))));
   const openRows = complaints.filter(item => stateOf(item) !== "Resolved");
 
@@ -50,21 +63,21 @@ export function ComplaintsScreen({ onCreate }: { onCreate: () => void }) {
     <PageHeader title={NAV.complaints} subtitle="Client complaints with SLA tracking, investigation and verified closure."
       actions={<Button onClick={onCreate}><Plus />Log complaint</Button>} />
     <StatStrip items={[
-      { icon: ClipboardList, value: String(openRows.length), label: "Open", note: `Across ${new Set(openRows.map(item => item.client)).size} sites` },
-      { icon: AlertTriangle, value: String(openRows.filter(item => item.priority === "High").length), label: "High priority", note: "4-hour SLA", tone: "red" },
-      { icon: CheckCircle2, value: "91%", label: "Closed on time", note: "Last 30 days", tone: "green" },
-      { icon: Users, value: "2", label: "Withdrawals", note: "Waiting for HR review", tone: "orange" },
+      { icon: ClipboardList, value: String(openRows.length), label: "Open", note: `Across ${new Set(openRows.map(item => item.client)).size} sites`, onClick: () => toggle("open"), actionLabel: "Show open complaints", active: filter === "open" },
+      { icon: AlertTriangle, value: String(openRows.filter(item => item.priority === "High").length), label: "High priority", note: "4-hour SLA", tone: "red", onClick: () => toggle("high"), actionLabel: "Show open high-priority complaints", active: filter === "high" },
+      { icon: CheckCircle2, value: "91%", label: "Closed on time", note: "Last 30 days", tone: "green", onClick: () => toggle("Resolved"), actionLabel: "Show resolved complaints", active: filter === "Resolved" },
+      { icon: Users, value: "2", label: "Withdrawals", note: "Waiting for HR review", tone: "orange", onClick: onNavigate && (() => onNavigate("exit-clearance")), actionLabel: "Open exit clearance" },
     ]} />
     <SearchBar value={query} onChange={setQuery} placeholder="Search by ID, site, issue or owner" />
     <ListFilterRow>
-      <FilterChips options={[...complaintFilters]} value={filter} onChange={setFilter} />
+      <FilterChips<ComplaintFilter> options={[...complaintFilters]} value={filter} onChange={setFilter} />
       <span className="text-xs text-muted">{rows.length} of {complaints.length} complaints</span>
     </ListFilterRow>
     <Panel flush>
       <DataTable rows={rows} rowKey={row => row.id} onRowClick={setOpen}
         empty={<div className="p-4"><EmptyState icon={ClipboardList} message="No complaints match these filters." actionLabel="Clear filters" onAction={() => { setFilter("all"); setQuery(""); }} /></div>}
         columns={[
-          { header: "Complaint", cell: row => <span><strong className="block text-sm">{row.issue}</strong><small className="text-xs text-muted">{row.id}</small></span> },
+          { header: "Complaint", cell: row => <span><strong className="block text-sm font-medium">{row.issue}</strong><small className="text-xs text-muted">{row.id}</small></span> },
           { header: "Site", cell: row => row.client },
           { header: "Owner", cell: row => row.owner, hideOnMobile: true },
           { header: "SLA due", cell: row => row.due },
@@ -170,18 +183,7 @@ type ReportSpec = { columns: ReportColumn[]; rows: (string | number)[][] };
 type Filters = { district: string; client: string; employee: string };
 type Grouping = "none" | "Site" | "District" | "Employee";
 
-const reportNames = [
-  "Attendance summary",
-  "Late login & absenteeism",
-  "Statutory contributions",
-  "Deduction log",
-  "Net payout register",
-  "Uniform recovery",
-  "Site coverage",
-  "Complaint SLA",
-];
-
-function buildReport(report: string, filters: Filters): ReportSpec {
+function buildReport(report: ReportName, filters: Filters): ReportSpec {
   const byEmployee = (name: string) => filters.employee === "All employees" || filters.employee === name;
   const byDistrict = (district: string) => filters.district === "All districts" || filters.district === district;
   const siteDistrict = (siteName: string) => sites.find(site => site.name === siteName)?.district ?? "—";
@@ -240,9 +242,9 @@ const sumColumns = (spec: ReportSpec, rows: (string | number)[][]) => spec.colum
   return Math.round(total * 100) / 100;
 });
 
-export function ReportsScreen() {
+export function ReportsScreen({ report: reportProp = DEFAULT_REPORT_NAME }: { report?: ReportName }) {
   const notify = useToast();
-  const [report, setReport] = useState(reportNames[0]);
+  const report = reportProp;
   const [filters, setFilters] = useState<Filters>({ district: "All districts", client: "All clients", employee: "All employees" });
   const [from, setFrom] = useState("2026-08-01");
   const [to, setTo] = useState("2026-08-31");
@@ -261,12 +263,6 @@ export function ReportsScreen() {
   const groupIndex = grouping === "none" ? -1 : spec.columns.findIndex(column => column.label === grouping);
   const availableGroupings = (["Site", "District", "Employee"] as const).filter(label => spec.columns.some(column => column.label === label));
 
-  const selectReport = (next: string) => {
-    setReport(next);
-    const nextSpec = buildReport(next, filters);
-    setMapColumns(identityColumns(nextSpec.columns));
-    if (grouping !== "none" && !nextSpec.columns.some(column => column.label === grouping)) setGrouping("none");
-  };
   const moveColumn = (index: number, direction: -1 | 1) => setMapColumns(current => {
     const next = [...current]; const target = index + direction;
     if (target < 0 || target >= next.length) return current;
@@ -302,9 +298,10 @@ export function ReportsScreen() {
   }, [spec.rows, groupIndex]);
   const orderedRows = groups.flatMap(group => group.rows);
 
-  const exportCsv = () => {
+  const exportExcel = async () => {
     const mapped = applyTemplate(spec.columns, orderedRows, { name: "live", report, columns: mapColumns });
-    downloadCsv(`${report.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${from}-to-${to}`, mapped.headers, mapped.rows);
+    const base = report.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    await downloadExcel(`${base}-${from}-to-${to}`, mapped.headers, mapped.rows, report);
     notify(`${report} downloaded · ${mapped.rows.length} rows`);
   };
 
@@ -314,22 +311,16 @@ export function ReportsScreen() {
   const totals = sumColumns(spec, spec.rows);
   const hasTotals = totals.some(value => value !== null);
 
+  useEffect(() => {
+    setMapColumns(identityColumns(spec.columns));
+    if (grouping !== "none" && !spec.columns.some(column => column.label === grouping)) setGrouping("none");
+  }, [report]);
+
   return <>
-    <PageHeader title={NAV.reports} subtitle="Operational and payroll reports with shared filters and client-specific export columns."
-      actions={<Button disabled={dateError || spec.rows.length === 0} onClick={exportCsv}><Download />Export CSV</Button>} />
-    <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <Panel title="Reports" flush>
-        <nav className="grid gap-0.5 p-2">
-          {reportNames.map(item => (
-            <button key={item} type="button" onClick={() => selectReport(item)}
-              className={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm", report === item ? "bg-emerald/10 font-semibold text-emerald" : "text-foreground/70 hover:bg-surface hover:text-foreground")}>
-              <FileSpreadsheet className="h-4 w-4 shrink-0" />{item}
-            </button>
-          ))}
-        </nav>
-      </Panel>
-      <div className="grid min-w-0 gap-4">
-        <Panel title={report} description={`${spec.rows.length} rows · ${from} to ${to}`}>
+    <PageHeader title={report} subtitle="Operational and payroll reports with shared filters and client-specific export columns."
+      actions={<Button disabled={dateError || spec.rows.length === 0} onClick={exportExcel}><Download />Export Excel</Button>} />
+    <div className="grid min-w-0 gap-4">
+        <Panel title="Filters" description={`${spec.rows.length} rows · ${from} to ${to}`}>
           <FormGrid className="lg:grid-cols-3">
             <Field label="From"><Input type="date" value={from} onChange={event => setFrom(event.target.value)} /></Field>
             <Field label="To"><Input type="date" value={to} onChange={event => setTo(event.target.value)} /></Field>
@@ -401,7 +392,6 @@ export function ReportsScreen() {
             ))}
           </div>
         </Panel>
-      </div>
     </div>
   </>;
 }
@@ -494,7 +484,7 @@ export function ImportsScreen({ initialKind }: { initialKind?: string }) {
 
         {file && step === 3 && <>
           <InlineAlert tone={done ? "success" : "info"}>
-            <strong className="block">{done ? "Import complete" : `146 ${kind.toLowerCase()} records ready`}</strong>
+            <strong className="block font-medium">{done ? "Import complete" : `146 ${kind.toLowerCase()} records ready`}</strong>
             {done ? "A batch reference and audit log were created." : "Skipped rows stay excluded until you fix and re-import them."}
           </InlineAlert>
           <div className="mt-4 flex justify-end gap-2">
@@ -510,15 +500,58 @@ export function ImportsScreen({ initialKind }: { initialKind?: string }) {
 
 /* --------------------------------- Settings -------------------------------- */
 
-const settingGroups = ["Organization", "Onboarding", "Attendance", "Payroll", "PF and ESI", "Duty units", "Notifications", "Users and roles"] as const;
+/** Organisation-wide rating types. Every employee profile offers these; overall = average of each type's latest score. */
+function RatingTypesSettings() {
+  const confirm = useConfirm();
+  const { ratingTypes, addRatingType, renameRatingType, removeRatingType } = useOps();
+  const remove = async (id: string, label: string) => {
+    if (await confirm({ title: `Remove the "${label}" rating type?`, description: "Employees can no longer be rated on it, and its existing scores stop counting towards their overall rating.", confirmLabel: "Remove", destructive: true })) removeRatingType(id);
+  };
+  return <FormStack>
+    <p className="text-sm text-muted">The kinds of rating collected for every employee, such as HR, client or field officer. An employee&apos;s overall rating is the average of the latest score of each type, shown to one decimal place; it also ranks relievers in Deployment.</p>
+    <div className="grid gap-2">
+      {ratingTypes.map((type, index) => (
+        <div key={type.id} className="flex items-center gap-2">
+          <Input className="h-9" value={type.label} onChange={event => renameRatingType(type.id, event.target.value)} aria-label={`Rating type ${index + 1} name`} />
+          {type.id === HR_RATING_TYPE
+            ? <span className="w-[120px] shrink-0 text-xs text-muted">Used by HR quality</span>
+            : <Button variant="ghost" size="sm" className="w-[120px] shrink-0 text-status-danger" onClick={() => remove(type.id, type.label)}><X />Remove</Button>}
+        </div>
+      ))}
+    </div>
+    <AddItemRow label="Add a rating type" placeholder="e.g. Training officer" buttonLabel="Add" existing={ratingTypes.map(type => type.label)} onAdd={addRatingType} />
+  </FormStack>;
+}
 
-export function SettingsScreen({ onOpenAccess }: { onOpenAccess: () => void }) {
+/** Per-browser switch for system notifications. Saves immediately, unlike the organisation rules below it. */
+function DesktopAlertsSettings() {
+  const notify = useToast();
+  const alerts = useDesktopAlerts();
+  const test = () => {
+    if (!showDesktopAlert({ title: "BMG Security · test alert", body: "Desktop alerts are working. New alerts will appear like this.", tag: "test", force: true })) {
+      notify({ message: "Couldn't show a test alert. Check that notifications are allowed for this site.", kind: "error" });
+    }
+  };
+  return <Section title="Desktop alerts" className="mb-0">
+    <p className="mb-3 text-sm text-muted">
+      Show new bell alerts as system notifications when this tab is in the background. Click one to open it.
+    </p>
+    {alerts.state === "unsupported" && <InlineAlert>This browser doesn&apos;t support desktop notifications.</InlineAlert>}
+    {alerts.state === "default" && <Button onClick={() => alerts.requestPermission()}><BellRing />Turn on desktop alerts</Button>}
+    {alerts.state === "denied" && <InlineAlert tone="warning">Notifications are blocked for this site. Click the lock or site-info icon next to the address bar, allow Notifications, then come back to this page.</InlineAlert>}
+    {alerts.state === "granted" && <div className="grid gap-3">
+      <ToggleRow title="Show desktop alerts" description={alerts.enabled ? "On for this browser." : "Off. Alerts only appear in the bell."} checked={alerts.enabled} onChange={alerts.setEnabled} />
+      <div><Button variant="outline" size="sm" disabled={!alerts.active} onClick={test}><BellRing />Send a test alert</Button></div>
+    </div>}
+  </Section>;
+}
+
+export function SettingsScreen({ group }: { group: SettingsGroup }) {
   const notify = useToast();
   const confirm = useConfirm();
   const [radius, setRadius] = useState(100);
   const [unit, setUnit] = useState("0.25");
   const [dutyUnits, setDutyUnits] = useState(["0.25", "0.50", "0.75", "1.00", "1.50"]);
-  const [group, setGroup] = useState<(typeof settingGroups)[number]>("Attendance");
   const onboarding = useOnboarding();
   const docTypes = onboarding.config.documentChecklist;
   const setDocTypes = (update: (current: string[]) => string[]) => onboarding.saveConfig({ ...onboarding.config, documentChecklist: update(docTypes) });
@@ -527,23 +560,16 @@ export function SettingsScreen({ onOpenAccess }: { onOpenAccess: () => void }) {
   const remove = async (title: string, description: string, action: () => void) => {
     if (await confirm({ title, description, confirmLabel: "Remove", destructive: true })) action();
   };
-  const autoSaved = group === "Onboarding" || group === "Users and roles";
+  const autoSaved = group === "Onboarding" || group === "Accessibility" || group === "Ratings";
+  const a11y = useAccessibilityPreferences();
 
   return <>
-    <PageHeader title={NAV.settings} subtitle="Organization defaults. Clients, sites, posts and employees can override them."
-      actions={autoSaved ? undefined : <Button onClick={() => notify(`${group} settings saved`)}><CheckCircle2 />Save {group.toLowerCase()} settings</Button>} />
-    <div className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-      <Panel title="Settings" flush>
-        <nav className="grid gap-0.5 p-2">
-          {settingGroups.map(item => (
-            <button key={item} type="button" onClick={() => setGroup(item)}
-              className={cn("flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm", group === item ? "bg-emerald/10 font-semibold text-emerald" : "text-foreground/70 hover:bg-surface hover:text-foreground")}>
-              <Settings className="h-4 w-4 shrink-0" />{item}
-            </button>
-          ))}
-        </nav>
-      </Panel>
-      <Panel title={group} description={autoSaved ? "Changes here save automatically." : "Organization default · effective 1 September 2026"}>
+    <PageHeader
+      title={group}
+      subtitle="Organization defaults. Clients, sites, posts and employees can override them."
+      actions={autoSaved ? undefined : <Button onClick={() => notify(`${group} settings saved`)}><CheckCircle2 />Save {group.toLowerCase()} settings</Button>}
+    />
+    <Panel description={autoSaved ? "Changes here save automatically." : "Organization default · effective 1 September 2026"}>
         {group === "Organization" && <FormGrid>
           <Field label="Standard payable days per month" hint="Monthly salary is divided by this when scheduled days aren't available."><Input type="number" defaultValue={26} /></Field>
           <Field label="Advance limit" hint="Share of wages earned so far, after deductions."><InputAffix suffix="% of earnings" type="number" defaultValue={40} /></Field>
@@ -582,6 +608,10 @@ export function SettingsScreen({ onOpenAccess }: { onOpenAccess: () => void }) {
           </div>
         </>}
         {group === "Notifications" && <FormStack>
+          <DesktopAlertsSettings />
+          <Section title="Alert rules" className="mb-0 border-t border-border pt-4">
+            <p className="text-sm text-muted">Which events raise an alert. Saved with the button above.</p>
+          </Section>
           <ToggleRow title="9:00 AM missing-login alert" description="Send the absence report to HR." defaultChecked />
           <ToggleRow title="Immediate vacancy alert" description="Notify district operations when leave or absence leaves a post empty." defaultChecked />
           <ToggleRow title="Missed night check escalation" description="Escalate after the response window." defaultChecked />
@@ -621,10 +651,60 @@ export function SettingsScreen({ onOpenAccess }: { onOpenAccess: () => void }) {
             <InputAffix suffix="days" type="number" min={1} value={onboarding.config.pfEsiWindowDays} onChange={event => onboarding.saveConfig({ ...onboarding.config, pfEsiWindowDays: Math.max(1, Number(event.target.value) || 1) })} />
           </Field>
         </FormStack>}
-        {group === "Users and roles" && <div>
-          <p className="text-sm text-muted">Roles, reporting lines, module permissions and individual user overrides are managed on the Users and roles screen.</p>
-          <Button variant="outline" className="mt-3" data-allow onClick={onOpenAccess}>Go to Users and roles</Button>
-        </div>}
+        {group === "Ratings" && <RatingTypesSettings />}
+        {group === "Accessibility" && <FormStack>
+          <p className="text-sm text-muted">Navigation and shortcuts. Changes apply on this device immediately.</p>
+          <ToggleRow
+            title="Unified sidebar"
+            description="One sidebar with expandable modules. Turn off to keep the icon rail and sub-menu separate."
+            checked={a11y.unifiedSidebar}
+            onChange={value => {
+              setAccessibilityPreference("unifiedSidebar", value);
+              notify("Preference saved");
+            }}
+          />
+          {a11y.unifiedSidebar && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-3 py-3">
+              <p className="text-sm font-medium text-foreground">Sidebar color</p>
+              <div className="flex gap-2" role="radiogroup" aria-label="Unified sidebar color">
+                {([
+                  { id: "white" as const, label: "White", swatch: "border-border bg-white" },
+                  { id: "navy" as const, label: "Navy blue", swatch: "border-[#0B2545] bg-navy" },
+                ]).map(option => {
+                  const selected = a11y.unifiedSidebarTheme === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => {
+                        setAccessibilityPreference("unifiedSidebarTheme", option.id);
+                        notify("Preference saved");
+                      }}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                        selected ? "border-emerald bg-emerald/10 text-foreground" : "border-border text-muted hover:bg-surface",
+                      )}
+                    >
+                      <span className={cn("h-3.5 w-3.5 rounded-full border", option.swatch)} />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <ToggleRow
+            title="Quick actions button"
+            description="Floating button for search, quick create and theme."
+            checked={a11y.showQuickActions}
+            onChange={value => {
+              setAccessibilityPreference("showQuickActions", value);
+              notify("Preference saved");
+            }}
+          />
+        </FormStack>}
         {!autoSaved && <div className="mt-6 rounded-xl bg-surface p-3">
           <strong className="text-xs font-semibold uppercase tracking-wide text-muted">How overrides work</strong>
           <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
@@ -632,7 +712,6 @@ export function SettingsScreen({ onOpenAccess }: { onOpenAccess: () => void }) {
           </div>
           <p className="mt-2 text-xs text-muted">The most specific rule wins. Each override keeps its source and start date.</p>
         </div>}
-      </Panel>
-    </div>
+    </Panel>
   </>;
 }

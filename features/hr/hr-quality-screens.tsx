@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FC } from "react";
 import { AlertTriangle, Building2, CheckCircle2, Phone, Star, Users } from "lucide-react";
-import { employees, ratings as ratingSeed, satisfactionCalls, sites } from "@/lib/mock-data";
+import { employees, satisfactionCalls, sites } from "@/lib/mock-data";
 import { useOps } from "@/components/shared/ops-context";
+import { averageRating } from "@/lib/ratings";
 import {
   Button, DataTable, DetailDrawer, EmptyState, Field, FilterChips, FormStack, InlineAlert, ListFilterRow, ListRow,
   PageHeader, Panel, PersonCell, SegmentedControl, Select, StatStrip, StatusChip, Textarea,
@@ -11,30 +12,31 @@ import {
 import { useToast } from "@/components/shared/toast-context";
 import { APP_TODAY, formatAppDate } from "@/lib/app-date";
 import { NAV } from "@/lib/labels";
+import type { NavClickMeta } from "@/lib/nav-config";
 import type { Rating, RecruitmentVacancy, SatisfactionCall } from "@/types/domain";
 
 const scoreOptions = Array.from({ length: 10 }, (_, index) => index + 1);
+type OnNavigate = (view: string, meta?: string | NavClickMeta) => void;
+const scrollToId = (id: string) => requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }));
 
-export function HrQualityScreen() {
+export const HrQualityScreen: FC<{ onNavigate?: OnNavigate }> = () => {
   const notify = useToast();
   const [calls, setCalls] = useState<SatisfactionCall[]>(satisfactionCalls);
   const [recording, setRecording] = useState<SatisfactionCall | null>(null);
   const [score, setScore] = useState(8);
   const [notes, setNotes] = useState("");
-  const [allRatings, setAllRatings] = useState<Rating[]>(ratingSeed);
+  const { ratings: allRatings, addRating } = useOps();
   const [tab, setTab] = useState<"Employees" | "Sites">("Employees");
   const [pendingScores, setPendingScores] = useState<Record<string, number>>({});
+  const [callFilter, setCallFilter] = useState<"all" | SatisfactionCall["status"]>("all");
 
   const employeeOf = (id: string) => employees.find(item => item.id === id);
-  const averageFor = (type: Rating["targetType"], id: string) => {
-    const scores = allRatings.filter(rating => rating.targetType === type && rating.targetId === id).map(rating => rating.score);
-    return scores.length ? Math.round((scores.reduce((sum, value) => sum + value, 0) / scores.length) * 10) / 10 : null;
-  };
+  const averageFor = (type: Rating["targetType"], id: string) => averageRating(allRatings, type, id);
   const lastFor = (type: Rating["targetType"], id: string) =>
     allRatings.filter(rating => rating.targetType === type && rating.targetId === id).sort((a, b) => b.on.localeCompare(a.on))[0];
   const rate = (type: Rating["targetType"], id: string, title: string) => {
     const value = pendingScores[type + id] ?? 8;
-    setAllRatings(current => [...current, { targetType: type, targetId: id, score: value, ratedBy: "HR desk", on: APP_TODAY }]);
+    addRating({ targetType: type, targetId: id, score: value, ratedBy: "HR desk", on: APP_TODAY, source: "hr" });
     notify(`${title} rated ${value}/10`);
   };
   const saveCall = () => {
@@ -46,6 +48,9 @@ export function HrQualityScreen() {
   };
 
   const dueCalls = calls.filter(call => call.status === "due");
+  const visibleCalls = callFilter === "all" ? calls : calls.filter(call => call.status === callFilter);
+  const toggleCalls = (status: SatisfactionCall["status"]) => { setCallFilter(current => current === status ? "all" : status); scrollToId("hr-welfare-calls"); };
+  const showRatings = (next: typeof tab) => { setTab(next); scrollToId("hr-ratings"); };
   const targets = tab === "Employees"
     ? employees.map(employee => ({ key: employee.id, title: employee.name, subtitle: employee.id, type: "employee" as const }))
     : sites.map(site => ({ key: site.name, title: site.name, subtitle: site.client, type: "site" as const }));
@@ -53,14 +58,14 @@ export function HrQualityScreen() {
   return <>
     <PageHeader title={NAV.hrQuality} subtitle="Welfare calls 3 days after joining, and 1–10 ratings for employees and sites." />
     <StatStrip items={[
-      { icon: Phone, value: String(dueCalls.length), label: "Calls to make", note: "3 days after joining", tone: dueCalls.length ? "orange" : "green" },
-      { icon: CheckCircle2, value: String(calls.filter(call => call.status === "done").length), label: "Calls completed", note: "This month", tone: "green" },
-      { icon: Users, value: String(new Set(allRatings.filter(rating => rating.targetType === "employee").map(rating => rating.targetId)).size), label: "Employees rated", note: "1–10 scale" },
-      { icon: Building2, value: String(new Set(allRatings.filter(rating => rating.targetType === "site").map(rating => rating.targetId)).size), label: "Sites rated", note: "1–10 scale" },
+      { icon: Phone, value: String(dueCalls.length), label: "Calls to make", note: "3 days after joining", tone: dueCalls.length ? "orange" : "green", onClick: () => toggleCalls("due"), actionLabel: "Show calls still to make", active: callFilter === "due" },
+      { icon: CheckCircle2, value: String(calls.filter(call => call.status === "done").length), label: "Calls completed", note: "This month", tone: "green", onClick: () => toggleCalls("done"), actionLabel: "Show completed calls", active: callFilter === "done" },
+      { icon: Users, value: String(new Set(allRatings.filter(rating => rating.targetType === "employee").map(rating => rating.targetId)).size), label: "Employees rated", note: "1–10 scale", onClick: () => showRatings("Employees"), actionLabel: "Show employee ratings", active: tab === "Employees" },
+      { icon: Building2, value: String(new Set(allRatings.filter(rating => rating.targetType === "site").map(rating => rating.targetId)).size), label: "Sites rated", note: "1–10 scale", onClick: () => showRatings("Sites"), actionLabel: "Show site ratings", active: tab === "Sites" },
     ]} />
-    <Panel title="Welfare calls" description="A call task is created 3 days after every new joiner. Call the guard and record how they're settling in." className="mb-4">
-      {calls.length === 0 && <EmptyState icon={Phone} message="No welfare calls scheduled." />}
-      {calls.map(call => {
+    <div id="hr-welfare-calls" className="scroll-mt-4"><Panel title="Welfare calls" description="A call task is created 3 days after every new joiner. Call the guard and record how they're settling in." className="mb-4">
+      {visibleCalls.length === 0 && <EmptyState icon={Phone} message={callFilter === "due" ? "No calls left to make." : callFilter === "done" ? "No calls recorded yet." : "No welfare calls scheduled."} />}
+      {visibleCalls.map(call => {
         const who = employeeOf(call.employeeId);
         const overdue = call.status === "due" && call.dueBy < APP_TODAY;
         return (
@@ -72,8 +77,8 @@ export function HrQualityScreen() {
           </ListRow>
         );
       })}
-    </Panel>
-    <Panel title="Ratings" description="Averages appear wherever the employee or site is shown.">
+    </Panel></div>
+    <div id="hr-ratings" className="scroll-mt-4"><Panel title="Ratings" description="Averages appear wherever the employee or site is shown.">
       <SegmentedControl options={["Employees", "Sites"] as const} value={tab} onChange={setTab} />
       <div className="max-h-[460px] overflow-y-auto">
         {targets.map(target => {
@@ -81,7 +86,7 @@ export function HrQualityScreen() {
           const last = lastFor(target.type, target.key);
           return (
             <ListRow key={target.key}>
-              <div className="min-w-[160px] flex-1"><strong className="block text-sm">{target.title}</strong><small className="text-xs text-muted">{target.subtitle}</small></div>
+              <div className="min-w-[160px] flex-1"><strong className="block text-sm font-medium">{target.title}</strong><small className="text-xs text-muted">{target.subtitle}</small></div>
               <span className="flex w-24 items-center gap-1 text-sm font-semibold text-emerald">{average !== null ? <><Star className="h-4 w-4 fill-current" />{average}/10</> : <span className="font-normal text-muted">Not rated</span>}</span>
               <span className="hidden w-56 text-xs text-muted md:inline">{last ? `Last ${last.score}/10 by ${last.ratedBy} · ${formatAppDate(last.on)}` : ""}</span>
               <span className="flex items-center gap-1.5">
@@ -94,7 +99,7 @@ export function HrQualityScreen() {
           );
         })}
       </div>
-    </Panel>
+    </Panel></div>
 
     {recording && <DetailDrawer title="Record welfare call" subtitle={`${employeeOf(recording.employeeId)?.name ?? recording.employeeId} · joined ${formatAppDate(recording.joinedOn)}`} onClose={() => setRecording(null)}
       footer={<>
@@ -108,35 +113,47 @@ export function HrQualityScreen() {
       </FormStack>
     </DetailDrawer>}
   </>;
-}
+};
 
 const sourceLabel: Record<RecruitmentVacancy["source"], string> = { exit: "Exit", "new-site": "New site", expansion: "Expansion" };
-type VacancyFilter = "active" | "all";
+type VacancyFilter = "active" | "all" | "open" | "high" | "exit" | "filled";
+const vacancyMatches: Record<VacancyFilter, (vacancy: RecruitmentVacancy) => boolean> = {
+  active: vacancy => vacancy.status !== "filled",
+  all: () => true,
+  open: vacancy => vacancy.status === "open",
+  high: vacancy => vacancy.priority === "high" && vacancy.status !== "filled",
+  exit: vacancy => vacancy.source === "exit",
+  filled: vacancy => vacancy.status === "filled",
+};
+const vacancyEmpty: Record<VacancyFilter, string> = {
+  active: "Every vacancy is filled.", all: "No vacancies recorded.", open: "No open vacancies.", high: "No high-priority vacancies left.", exit: "No vacancies from exits.", filled: "No vacancies filled yet.",
+};
 
-export function RecruitmentScreen() {
+export const RecruitmentScreen: FC<{ onNavigate?: OnNavigate }> = () => {
   const notify = useToast();
   const { vacancies, updateVacancy } = useOps();
   const [filter, setFilter] = useState<VacancyFilter>("active");
   const sorted = [...vacancies].sort((a, b) => (a.priority === b.priority ? b.openedOn.localeCompare(a.openedOn) : a.priority === "high" ? -1 : 1));
-  const visible = filter === "active" ? sorted.filter(vacancy => vacancy.status !== "filled") : sorted;
+  const visible = sorted.filter(vacancyMatches[filter]);
   const open = vacancies.filter(vacancy => vacancy.status === "open");
+  const toggle = (next: VacancyFilter) => setFilter(current => current === next ? "active" : next);
 
   return <>
     <PageHeader title={NAV.recruitment} subtitle="Vacancies from exits, new sites and expansion. Exits create a vacancy automatically." />
     <StatStrip items={[
-      { icon: Users, value: String(open.length), label: "Open vacancies", note: "Need candidates", tone: open.length ? "orange" : "green" },
-      { icon: AlertTriangle, value: String(vacancies.filter(vacancy => vacancy.priority === "high" && vacancy.status !== "filled").length), label: "High priority", note: "Fill these first", tone: "red" },
-      { icon: Building2, value: String(vacancies.filter(vacancy => vacancy.source === "exit").length), label: "From exits", note: "Created automatically" },
-      { icon: CheckCircle2, value: String(vacancies.filter(vacancy => vacancy.status === "filled").length), label: "Filled", note: "This month", tone: "green" },
+      { icon: Users, value: String(open.length), label: "Open vacancies", note: "Need candidates", tone: open.length ? "orange" : "green", onClick: () => toggle("open"), actionLabel: "Show open vacancies", active: filter === "open" },
+      { icon: AlertTriangle, value: String(vacancies.filter(vacancyMatches.high).length), label: "High priority", note: "Fill these first", tone: "red", onClick: () => toggle("high"), actionLabel: "Show high-priority vacancies", active: filter === "high" },
+      { icon: Building2, value: String(vacancies.filter(vacancyMatches.exit).length), label: "From exits", note: "Created automatically", onClick: () => toggle("exit"), actionLabel: "Show vacancies created by exits", active: filter === "exit" },
+      { icon: CheckCircle2, value: String(vacancies.filter(vacancyMatches.filled).length), label: "Filled", note: "This month", tone: "green", onClick: () => toggle("filled"), actionLabel: "Show filled vacancies", active: filter === "filled" },
     ]} />
     <ListFilterRow>
       <FilterChips<VacancyFilter> options={[{ id: "active", label: "Not yet filled" }, { id: "all", label: "All vacancies" }]} value={filter} onChange={setFilter} />
     </ListFilterRow>
     <Panel flush>
       <DataTable rows={visible} rowKey={row => row.id}
-        empty={<div className="p-4"><EmptyState icon={CheckCircle2} message={filter === "active" ? "Every vacancy is filled." : "No vacancies recorded."} /></div>}
+        empty={<div className="p-4"><EmptyState icon={CheckCircle2} message={vacancyEmpty[filter]} /></div>}
         columns={[
-          { header: "Site", cell: vacancy => <span><strong className="block text-sm">{vacancy.site}</strong><small className="text-xs text-muted">{vacancy.post}</small></span> },
+          { header: "Site", cell: vacancy => <span><strong className="block text-sm font-medium">{vacancy.site}</strong><small className="text-xs text-muted">{vacancy.post}</small></span> },
           { header: "District", cell: vacancy => vacancy.district },
           { header: "Source", cell: vacancy => <StatusChip tone={vacancy.source === "exit" ? "info" : "neutral"}>{sourceLabel[vacancy.source]}</StatusChip> },
           { header: "Priority", cell: vacancy => <StatusChip tone={vacancy.priority === "high" ? "danger" : "neutral"}>{vacancy.priority === "high" ? "High" : "Normal"}</StatusChip> },
@@ -149,4 +166,4 @@ export function RecruitmentScreen() {
         ]} />
     </Panel>
   </>;
-}
+};

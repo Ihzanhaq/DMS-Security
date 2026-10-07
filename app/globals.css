@@ -117,23 +117,33 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
+/* Element resets must stay in the base layer: unlayered rules beat every
+   Tailwind utility, which made all buttons ignore text-sm / font-medium. */
+@layer base {
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
 
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
+  /* Browser default is 700; Scalar emphasis tops out at semibold. */
+  b,
+  strong {
+    font-weight: 600;
+  }
 
-input:focus,
-select:focus,
-textarea:focus,
-button:focus-visible {
-  outline: none;
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus,
+  button:focus-visible {
+    outline: none;
+  }
 }
 
 /* View-only screens: action buttons look unavailable; the shell intercepts their clicks. */
@@ -210,3 +220,48 @@ html.dark .geo-map .leaflet-tile-pane {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* FullCalendar (site attendance calendar): map the classic theme palette to app tokens so it follows light/dark mode. */
+.sms-calendar {
+  --fc-classic-button: hsl(var(--card));
+  --fc-classic-button-border: hsl(var(--border));
+  --fc-classic-button-strong: hsl(var(--primary));
+  --fc-classic-button-strong-border: hsl(var(--primary));
+  --fc-classic-button-outline: hsl(var(--primary) / 0.4);
+  --fc-classic-button-foreground: hsl(var(--foreground));
+  --fc-classic-primary: hsl(var(--primary));
+  --fc-classic-primary-foreground: #fff;
+  --fc-classic-highlight: hsl(var(--primary) / 0.12);
+  --fc-classic-today: hsl(var(--primary) / 0.08);
+  --fc-classic-now: #ef4444;
+  --fc-classic-background: hsl(var(--card));
+  --fc-classic-faint: hsl(var(--surface));
+  --fc-classic-muted: hsl(var(--border) / 0.6);
+  --fc-classic-strong: hsl(var(--border));
+  --fc-classic-foreground: hsl(var(--foreground));
+  --fc-classic-faint-foreground: hsl(var(--muted));
+  --fc-classic-muted-foreground: hsl(var(--muted));
+  --fc-classic-border: hsl(var(--border));
+  --fc-classic-strong-border: hsl(var(--muted) / 0.6);
+  font-size: 0.8125rem;
+}
+.sms-calendar button { border-radius: calc(var(--radius) - 4px); font-weight: 500; }
+.sms-calendar a { color: inherit; }
+.sms-calendar .sms-event-scheduled,
+.sms-calendar .sms-event-absent { background: transparent !important; border: 1px dashed currentColor !important; box-shadow: none !important; }
+.sms-calendar .sms-event-scheduled { opacity: 0.55; color: hsl(var(--muted)) !important; }
+.sms-calendar .sms-event-absent { color: #ef4444 !important; }
+/* Week/day grid: keep each shift's label in view while its block scrolls past. */
+.sms-calendar .sms-event-pinned,
+.sms-calendar .sms-event-pinned * { overflow: visible !important; }
+.sms-calendar .sms-event-pinned > *:has(.sms-event-label) { height: 100%; }
+.sms-calendar .sms-event-label { position: sticky; top: var(--sms-calendar-header, 26px); }
+.sms-calendar .sms-event-label strong,
+.sms-calendar .sms-event-label span { overflow: hidden; }
+
+/* Boundary editor: true-colour tiles (satellite must not be filtered) and more room to trace corners. */
+.geo-map.boundary-editor { min-height: 520px; }
+.geo-map.boundary-editor .leaflet-tile-pane,
+html.dark .geo-map.boundary-editor .leaflet-tile-pane { filter: none; }
+.geo-map.boundary-editor .marker-icon { border-color: #00be73; }
+@media (max-width: 767px) { .geo-map.boundary-editor { min-height: 380px; } }

@@ -40,7 +40,7 @@ function SalaryExceptions({ breakdown }: { breakdown: PayrollBreakdown }) {
   if (breakdown.exceptions.length === 0) return null;
   return (
     <InlineAlert tone="danger" className="mb-4">
-      <strong className="block">Payroll setup needed</strong>
+      <strong className="block font-medium">Payroll setup needed</strong>
       <ul className="mt-1 list-disc pl-4">
         {breakdown.exceptions.map((item, index) => <li key={`${item.code}-${index}`}>{item.message}</li>)}
       </ul>
@@ -59,7 +59,7 @@ function SalarySiteDetails({ breakdown, expanded }: { breakdown: PayrollBreakdow
         <details key={site.site} open={expanded ?? breakdown.sites.length <= 3} className="group rounded-xl border border-border">
           <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-3">
             <div className="min-w-0 flex-1">
-              <strong className="block text-sm">{site.site}</strong>
+              <strong className="block text-sm font-medium">{site.site}</strong>
               <small className="text-xs text-muted">{site.duties.toFixed(2)} duties · {site.schemeLabel} · {site.rateSources.join(" / ")} rate</small>
             </div>
             <span className="hidden text-xs text-muted tabular-nums sm:inline">{rupees(site.gross)} gross</span>
@@ -73,7 +73,7 @@ function SalarySiteDetails({ breakdown, expanded }: { breakdown: PayrollBreakdow
             {site.lines.map(line => (
               <div key={line.id} className="grid grid-cols-[1fr_60px_90px_90px] gap-2 border-t border-border px-3 py-2 text-sm">
                 <span>
-                  <strong className="block">{new Date(`${line.date}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</strong>
+                  <strong className="block font-medium">{new Date(`${line.date}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}</strong>
                   <small className="text-xs text-muted">{line.post}</small>
                 </span>
                 <span className="text-right tabular-nums">{line.quantity.toFixed(2)}</span>
@@ -152,7 +152,7 @@ export function EmployeeSalaryBreakdown({ employeeId }: { employeeId: string }) 
     <div>
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <strong className="block text-sm">Salary breakdown</strong>
+          <strong className="block text-sm font-medium">Salary breakdown</strong>
           <small className="text-xs text-muted">{payBasisLabel(breakdown.payBasis)} · {closed ? "Closed snapshot" : "Live calculation"}</small>
         </div>
         <PeriodSelect period={period} onChange={setPeriod} />

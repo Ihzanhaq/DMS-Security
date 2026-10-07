@@ -6,7 +6,8 @@ import {
   MapPin, MessageSquare, Navigation, Phone, Receipt, ShieldCheck, UserRound, Users, Wallet,
 } from "lucide-react";
 import type { AppView, DutyChangeReason, DutyChangeRequest, DutyChangeType, GeoState, Ticket, TicketCategory, UniformRequest } from "@/types/domain";
-import { complaintTrail, complaints, distanceMetres, dutyChangeRequests, employees, payslips, rupees, sites, sopDocuments, tickets as ticketSeed, uniformKit, uniformPlans, uniformRequests } from "@/lib/mock-data";
+import { complaintTrail, complaints, distanceMetres, employees, payslips, rupees, sites, sopDocuments, tickets as ticketSeed, uniformKit, uniformPlans, uniformRequests } from "@/lib/mock-data";
+import { useOps } from "@/components/shared/ops-context";
 import { isInsideGeofence } from "@/lib/geofence";
 import { computeAdvanceEligibility } from "@/lib/advance-calculator";
 import { usePayroll } from "@/components/shared/payroll-context";
@@ -92,7 +93,7 @@ function GuardHelp() {
         {mine.length === 0 && <EmptyState icon={MessageSquare} message="You haven't raised any tickets yet." />}
         {mine.map(ticket => (
           <ListRow key={ticket.id} onClick={() => setOpen(ticket)}>
-            <div className="min-w-0 flex-1"><strong className="block text-sm">{ticket.subject}</strong><small className="text-xs text-muted">{ticket.id} · {formatAppDate(ticket.createdOn)}</small></div>
+            <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{ticket.subject}</strong><small className="text-xs text-muted">{ticket.id} · {formatAppDate(ticket.createdOn)}</small></div>
             <StatusChip tone={requestTone(ticket.status)}>{titleCase(ticket.status)}</StatusChip>
             <ChevronRight className="h-4 w-4 text-muted" />
           </ListRow>
@@ -186,11 +187,13 @@ function GuardDutyChange() {
   const [hours, setHours] = useState(2);
   const [note, setNote] = useState("");
   const [date, setDate] = useState("2026-09-23");
-  const [mine, setMine] = useState<DutyChangeRequest[]>(dutyChangeRequests.filter(request => request.employeeId === "BMG-1840"));
+  const [partnerId, setPartnerId] = useState("BMG-1902");
+  const { dutyRequests, addDutyRequest } = useOps();
+  const mine = dutyRequests.filter(request => request.employeeId === "BMG-1840");
   const [open, setOpen] = useState<DutyChangeRequest | null>(null);
   function submit() {
-    const request: DutyChangeRequest = { id: `DCR-${Date.now()}`, employeeId: "BMG-1840", type, date, site: guardSite.name, reason: type === "ot" ? "other" : reason, hours: type === "ot" ? hours : undefined, note, status: "pending" };
-    setMine(current => [request, ...current]);
+    const request: DutyChangeRequest = { id: `DCR-${Date.now()}`, employeeId: "BMG-1840", type, date, site: guardSite.name, reason: type === "ot" ? "other" : reason, hours: type === "ot" ? hours : undefined, partnerId: type === "swap" && partnerId ? partnerId : undefined, note, status: "pending" };
+    addDutyRequest(request);
     setNote("");
     notify(type === "ot" ? "Extra duty sent for approval" : "Request sent · your field officer has been notified");
   }
@@ -207,7 +210,7 @@ function GuardDutyChange() {
             </Select>
           </Field>
           {type !== "ot" && <Field label="Reason"><Select value={reason} onChange={event => setReason(event.target.value as DutyChangeReason)}><option value="sick">Sickness</option><option value="accident">Accident</option><option value="personal">Personal</option><option value="other">Other</option></Select></Field>}
-          {type === "swap" && <Field label="Swap with"><Select><option>Deepa Menon</option><option>Rajeev Kumar</option><option>Any available reliever</option></Select></Field>}
+          {type === "swap" && <Field label="Swap with"><Select value={partnerId} onChange={event => setPartnerId(event.target.value)}><option value="BMG-1902">Deepa Menon</option><option value="BMG-1988">Rajeev Kumar</option><option value="">Any available reliever</option></Select></Field>}
           {type === "ot" && <Field label="Extra hours"><InputAffix suffix="hours" type="number" min={1} max={12} value={hours} onChange={event => setHours(Number(event.target.value))} /></Field>}
           <Field label="Date"><Input type="date" value={date} onChange={event => setDate(event.target.value)} /></Field>
           <Field label="Details"><Textarea rows={3} value={note} onChange={event => setNote(event.target.value)} placeholder="What happened, and from when do you need cover?" /></Field>
@@ -219,7 +222,7 @@ function GuardDutyChange() {
         {mine.length === 0 && <EmptyState icon={CalendarDays} message="You haven't made any duty change requests." />}
         {mine.map(request => (
           <ListRow key={request.id} onClick={() => setOpen(request)}>
-            <div className="min-w-0 flex-1"><strong className="block text-sm">{dutyTypeLabel(request)}</strong><small className="text-xs text-muted">{formatAppDate(request.date)} · {request.note || titleCase(request.reason)}</small></div>
+            <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{dutyTypeLabel(request)}</strong><small className="text-xs text-muted">{formatAppDate(request.date)} · {request.note || titleCase(request.reason)}</small></div>
             <StatusChip tone={requestTone(request.status)}>{titleCase(request.status)}</StatusChip>
             <ChevronRight className="h-4 w-4 text-muted" />
           </ListRow>
@@ -233,6 +236,7 @@ function GuardDutyChange() {
         { label: "Site", value: open.site },
         { label: "Reason", value: titleCase(open.reason) },
         ...(open.hours ? [{ label: "Extra hours", value: `${open.hours} h` }] : []),
+        ...(open.type === "swap" ? [{ label: "Swap with", value: employees.find(item => item.id === open.partnerId)?.name ?? "Any available reliever" }] : []),
         { label: "Status", value: <StatusChip tone={requestTone(open.status)}>{titleCase(open.status)}</StatusChip> },
       ]} />
       {open.note && <Section title="Your note" className="mt-5"><p className="text-sm">{open.note}</p></Section>}
@@ -258,21 +262,35 @@ function GuardHome({ onNavigate }: { onNavigate: (view: AppView) => void }) {
   return <>
     <PageHeader title="Today's duty" subtitle={`${todayLabel} · ${guardSite.name}`} />
     <div className="grid gap-4 lg:grid-cols-2">
-      <section className="rounded-2xl bg-navy p-5 text-white shadow-sm" data-enter>
-        <span className="text-xs font-semibold uppercase tracking-wide text-white/60">Day shift</span>
-        <strong className="mt-1 block text-3xl font-bold tabular-nums">08:00–20:00</strong>
-        <p className="mt-1 text-sm text-white/70">Loading bay · Gate 2 · 1.00 duty</p>
-        <div className="mt-4 flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm">
-          <MapPin className="h-4 w-4 text-emerald" />
-          <span>{guardSite.name}<small className="block text-xs text-white/60">{guardSite.polygon ? `Site boundary · ${guardSite.polygon.length} corners` : `Within ${guardSite.radius} m of the post`}</small></span>
+      <Panel
+        title="Day shift"
+        description="Loading bay · Gate 2 · 1.00 duty"
+        className="border-emerald/45 bg-emerald/[0.04] shadow-md ring-1 ring-emerald/20"
+        action={<StatusChip tone="success">Today</StatusChip>}
+      >
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">Shift window</p>
+        <strong className="mt-1 block text-4xl font-bold tabular-nums tracking-tight text-foreground">08:00–20:00</strong>
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-sm">
+          <MapPin className="h-4 w-4 shrink-0 text-emerald" />
+          <span className="min-w-0">
+            <span className="block font-medium text-foreground">{guardSite.name}</span>
+            <small className="text-xs text-muted">{guardSite.polygon ? `Site boundary · ${guardSite.polygon.length} corners` : `Within ${guardSite.radius} m of the post`}</small>
+          </span>
         </div>
         <Button size="lg" className="mt-4 w-full" onClick={() => onNavigate("guard-punch")}><Navigation />Punch in</Button>
-      </section>
+      </Panel>
       <Panel title="Last approved payroll" description="August 2026">
         <div className="grid grid-cols-3 gap-2 text-center">
-          <div className="rounded-xl bg-surface p-3"><strong className="block text-lg font-bold tabular-nums">{breakdown.duties.toFixed(2)}</strong><span className="text-xs text-muted">Duties</span></div>
-          <div className="rounded-xl bg-surface p-3"><strong className="block text-lg font-bold tabular-nums">{rupees(breakdown.gross)}</strong><span className="text-xs text-muted">Earned</span></div>
-          <div className="rounded-xl bg-surface p-3"><strong className="block text-lg font-bold tabular-nums">{rupees(eligibility.maxAdvance)}</strong><span className="text-xs text-muted">Advance limit</span></div>
+          {[
+            [breakdown.duties.toFixed(2), "Duties"],
+            [rupees(breakdown.gross), "Earned"],
+            [rupees(eligibility.maxAdvance), "Advance limit"],
+          ].map(([value, label]) => (
+            <div key={label} className="rounded-xl border border-border bg-surface p-3">
+              <strong className="block text-lg font-bold tabular-nums text-foreground">{value}</strong>
+              <span className="text-xs text-muted">{label}</span>
+            </div>
+          ))}
         </div>
       </Panel>
       <Panel title="Services">
@@ -287,10 +305,11 @@ function GuardHome({ onNavigate }: { onNavigate: (view: AppView) => void }) {
       <Panel title="Emergency contacts" description={`For ${guardSite.name}`}>
         {guardSite.escalationContacts.length === 0 && <p className="text-sm text-muted">No site contacts set. Call the BMG control room.</p>}
         {guardSite.escalationContacts.map(contact => (
-          <a key={contact.label} href={`tel:${contact.phone.replace(/\s/g, "")}`} className="flex items-center gap-3 border-t border-border py-3 first:border-t-0 hover:text-emerald">
-            <IconTile icon={Phone} />
-            <span className="min-w-0 flex-1"><strong className="block text-sm">{contact.label}</strong><small className="text-xs text-muted">{contact.name}</small></span>
-            <b className="text-sm text-emerald">{contact.phone}</b>
+          <a key={contact.label} href={`tel:${contact.phone.replace(/\s/g, "")}`} aria-label={`Call ${contact.label}, ${contact.name} · ${contact.phone}`}
+            className="group flex items-center gap-3 rounded-lg border-t border-border py-3 first:border-t-0 hover:text-emerald focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald">
+            <span className="min-w-0 flex-1"><strong className="block text-sm font-medium">{contact.label}</strong><small className="text-xs text-muted">{contact.name}</small></span>
+            <b className="text-sm tabular-nums text-emerald">{contact.phone}</b>
+            <span aria-hidden className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald/10 text-emerald transition-colors group-hover:bg-emerald group-hover:text-white"><Phone className="h-4 w-4" /></span>
           </a>
         ))}
       </Panel>
@@ -354,7 +373,7 @@ function GuardPunch() {
           <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
             <IconTile icon={Crosshair} tone={current.tone} />
             <div>
-              <strong className="block text-sm">{current.label}</strong>
+              <strong className="block text-sm font-medium">{current.label}</strong>
               <small className="text-xs text-muted">{position ? `${position.lat.toFixed(5)}, ${position.lng.toFixed(5)} · ±${position.accuracy} m` : "Location is only used as attendance evidence."}</small>
             </div>
           </div>
@@ -396,7 +415,7 @@ function GuardSchedule() {
       {scheduleDays.map(row => (
         <ListRow key={row.date} onClick={() => setOpen(row)}>
           <span className="w-14 shrink-0 text-sm font-bold tabular-nums">{row.date}</span>
-          <div className="min-w-0 flex-1"><strong className="block text-sm">{row.site}</strong><small className="text-xs text-muted">{row.window}</small></div>
+          <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{row.site}</strong><small className="text-xs text-muted">{row.window}</small></div>
           <StatusChip tone={scheduleTone(row.state)}>{row.state}</StatusChip>
           <ChevronRight className="h-4 w-4 text-muted" />
         </ListRow>
@@ -493,7 +512,7 @@ function Payslips({ onNavigate }: { onNavigate: (view: AppView) => void }) {
       {payslips.map(slip => (
         <ListRow key={slip.month} onClick={() => setOpen(slip)}>
           <IconTile icon={Receipt} />
-          <div className="min-w-0 flex-1"><strong className="block text-sm">{slip.month}</strong><small className="text-xs text-muted">Paid by bank transfer</small></div>
+          <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{slip.month}</strong><small className="text-xs text-muted">Paid by bank transfer</small></div>
           <b className="text-sm tabular-nums">{rupees(slip.net)}</b>
           <ChevronRight className="h-4 w-4 text-muted" />
         </ListRow>
@@ -505,8 +524,8 @@ function Payslips({ onNavigate }: { onNavigate: (view: AppView) => void }) {
         <Button onClick={() => download(open)}><Download />Download</Button>
       </>}>
       <div className="mb-4 flex items-start justify-between rounded-xl bg-surface p-3 text-sm">
-        <div><strong className="block">BMG Security</strong><small className="text-xs text-muted">Lulu Mall, Kochi · PF + ESI</small></div>
-        <div className="text-right"><strong className="block">{open.month}</strong><small className="text-xs text-muted">{open.duties} duties</small></div>
+        <div><strong className="block font-medium">BMG Security</strong><small className="text-xs text-muted">Lulu Mall, Kochi · PF + ESI</small></div>
+        <div className="text-right"><strong className="block font-medium">{open.month}</strong><small className="text-xs text-muted">{open.duties} duties</small></div>
       </div>
       <Section title="Earnings">
         <DefRows rows={[
@@ -621,7 +640,7 @@ function GuardProfile({ activeGuard, onSwitchUser, onSignOut }: { activeGuard: G
           <button key={user.id} type="button" onClick={() => pickUser(user)}
             className={cn("flex items-center gap-3 rounded-xl border p-3 text-left hover:border-emerald hover:bg-emerald/5", user.id === activeGuard.id ? "border-emerald" : "border-border")}>
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">{user.initials}</span>
-            <span className="flex-1"><strong className="block text-sm">{user.name}</strong><small className="text-xs text-muted">{user.id}{user.id === activeGuard.id ? " · using now" : ""}</small></span>
+            <span className="flex-1"><strong className="block text-sm font-medium">{user.name}</strong><small className="text-xs text-muted">{user.id}{user.id === activeGuard.id ? " · using now" : ""}</small></span>
             <ChevronRight className="h-4 w-4 text-muted" />
           </button>
         ))}
@@ -712,7 +731,7 @@ function ClientPortalBody({ view, onNavigate }: { view: AppView; onNavigate: (vi
       {clientComplaints.length === 0 && <EmptyState icon={AlertTriangle} message="You haven't reported any issues." actionLabel="Report an issue" onAction={() => onNavigate("complaint-form")} />}
       {clientComplaints.map(item => (
         <ListRow key={item.id} onClick={() => setComplaint(item)}>
-          <div className="min-w-0 flex-1"><strong className="block text-sm">{item.issue}</strong><small className="text-xs text-muted">{item.id} · {item.owner} · due {item.due}</small></div>
+          <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{item.issue}</strong><small className="text-xs text-muted">{item.id} · {item.owner} · due {item.due}</small></div>
           <StatusChip tone={item.state === "Resolved" ? "success" : "info"}>{item.state}</StatusChip>
           <ChevronRight className="h-4 w-4 text-muted" />
         </ListRow>

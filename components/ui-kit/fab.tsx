@@ -17,6 +17,7 @@ export function FAB({
   return (
     <button
       type="button"
+      data-page-fab="true"
       onClick={onClick}
       aria-label={label}
       title={label}

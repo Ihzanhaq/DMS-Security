@@ -1,197 +1,322 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import {
-  AlertTriangle, Building2, CalendarCheck, Check, CheckCircle2, ChevronRight, Clock, Download, MapPin,
-  Navigation, Plus, Timer, Trash2, UserCheck, Users,
+  AlertTriangle, Building2, CalendarCheck, CalendarDays, Check, CheckCircle2, ChevronRight, Clock, Download, FileText, MapPin,
+  Crosshair, Navigation, Phone, Plus, Settings, Timer, Trash2, UserCheck, Users,
 } from "lucide-react";
-import { attendanceRows, dutyChangeRequests, employees, foTasks, guardChanges, inspections, ratings, rotationSplit, rupees, sites } from "@/lib/mock-data";
-import type { DutyChangeRequest, FoTask, GuardChangeEvent } from "@/types/domain";
+import { attendanceRows, employees, foTasks, inspections, rotationSplit, siteDocuments, siteFeedback, sites, sopDocuments } from "@/lib/mock-data";
+import { GeoMap } from "@/components/shared/geo-map";
+import type { DutyChangeReason, DutyChangeRequest, DutyChangeType, FoTask, NightCheck, Rating } from "@/types/domain";
+import { useOps } from "@/components/shared/ops-context";
+import { averageRating } from "@/lib/ratings";
 import {
-  Button, DataTable, DefRows, DetailDrawer, EmptyState, FilterChips, IconTile, InlineAlert, Input, KeyValue,
+  BackCrumb, Button, CallButton, DataTable, DefRows, DetailDrawer, EmptyState, Field, FilterChips, FormGrid, FormStack, IconTile, InlineAlert, Input, InputAffix, KeyValue,
   ListFilterRow, ListRow, PageHeader, Panel, PersonCell, ProgressBar, SearchBar, Section, SegmentedControl,
-  Select, SkillTags, SplitLayout, StatStrip, StatusChip, Timeline, useConfirm, type StatusTone,
+  Select, Sheet, SplitLayout, StatStrip, StatusChip, Textarea, Timeline, useConfirm, type StatusTone,
 } from "@/components/ui-kit";
 import { useToast } from "@/components/shared/toast-context";
 import { downloadCsv } from "@/lib/download";
 import { APP_TODAY, formatAppDate } from "@/lib/app-date";
 import { NAV, ROLE_TERMS } from "@/lib/labels";
+import type { NavClickMeta } from "@/lib/nav-config";
 import { cn } from "@/lib/utils";
+
+/** Phone on file for an employee id, when the id resolves. */
+const phoneOf = (employeeId: string) => employees.find(item => item.id === employeeId)?.phone;
 
 const siteDistrict = (siteName: string) => sites.find(site => site.name === siteName)?.district ?? "";
 
+const siteRating = (ratings: Rating[], siteName: string) => {
+  const average = averageRating(ratings, "site", siteName);
+  return average !== null ? `${average}/10` : "Not rated";
+};
+
+const sopBelongsToSite = (sopSite: string, siteName: string) =>
+  sopSite === siteName || sopSite.startsWith(`${siteName} ·`) || sopSite.startsWith(`${siteName},`);
+
 /* ---------------------------------- Sites --------------------------------- */
 
-export function SitesScreen({ onCreate, onConfigure, onEditBoundary }: { onCreate: () => void; onConfigure: (site: string) => void; onEditBoundary: (site: string) => void }) {
+export function SitesScreen({ onCreate, onViewDetails, onConfigure, onEditBoundary, onNavigate }: {
+  onCreate: () => void;
+  onNavigate?: (view: string, meta?: string | NavClickMeta) => void;
+  onViewDetails: (site: string) => void;
+  onConfigure: (site: string) => void;
+  onEditBoundary: (site: string) => void;
+}) {
+  const { ratings } = useOps();
   const [district, setDistrict] = useState("all");
   const [query, setQuery] = useState("");
+  const [layout, setLayout] = useState<"cards" | "list">("cards");
+  const [understaffed, setUnderstaffed] = useState(false);
   const districts = useMemo(() => Array.from(new Set(sites.map(site => site.district))), []);
   const q = query.trim().toLowerCase();
-  const visible = sites.filter(site => (district === "all" || site.district === district)
+  const clearFilters = () => { setDistrict("all"); setQuery(""); setUnderstaffed(false); };
+  const visible = sites.filter(site => (district === "all" || site.district === district) && (!understaffed || site.coverage < 100)
     && (!q || site.name.toLowerCase().includes(q) || site.client.toLowerCase().includes(q)));
-  const ratingOf = (siteName: string) => {
-    const scores = ratings.filter(rating => rating.targetType === "site" && rating.targetId === siteName).map(rating => rating.score);
-    return scores.length ? `${Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length * 10) / 10}/10` : "Not rated";
+  const openDetails = (siteName: string) => onViewDetails(siteName);
+  const stop = (event: MouseEvent, action: () => void) => {
+    event.stopPropagation();
+    action();
   };
   return <>
     <PageHeader title={NAV.sites} subtitle="Client locations, staffing, benefit rules and attendance boundaries." actions={<Button onClick={onCreate}><Plus />Add site</Button>} />
     <StatStrip items={[
-      { icon: Building2, value: "214", label: "Active sites", note: "483 configured posts" },
-      { icon: Users, value: "435", label: "Required posts", note: "408 staffed", tone: "green" },
-      { icon: AlertTriangle, value: "27", label: "Vacant posts", note: "Across 16 sites", tone: "orange" },
-      { icon: MapPin, value: "206", label: "Boundaries set", note: "8 need coordinates" },
+      { icon: Building2, value: "214", label: "Active sites", note: "483 configured posts", onClick: clearFilters, actionLabel: "Show all sites" },
+      { icon: Users, value: "435", label: "Required posts", note: "408 staffed", tone: "green", onClick: () => onNavigate?.("deployment"), actionLabel: "Open deployment" },
+      { icon: AlertTriangle, value: "27", label: "Vacant posts", note: "Across 16 sites", tone: "orange", onClick: () => setUnderstaffed(current => !current), actionLabel: "Show understaffed sites", active: understaffed },
+      { icon: MapPin, value: "206", label: "Boundaries set", note: "8 need coordinates", onClick: () => onNavigate?.("attendance"), actionLabel: "Open attendance punches" },
     ]} />
     <SearchBar value={query} onChange={setQuery} placeholder="Search by site or client" />
     <ListFilterRow>
       <FilterChips options={[{ id: "all", label: "All districts" }, ...districts.map(item => ({ id: item, label: item }))]} value={district} onChange={setDistrict} />
-      <span className="text-xs text-muted">{visible.length} sites</span>
+      <div className="flex flex-wrap items-center gap-2">
+        {understaffed && <Button variant="ghost" size="sm" onClick={() => setUnderstaffed(false)}>Show all staffing</Button>}
+        <SegmentedControl options={[{ id: "cards", label: "Cards" }, { id: "list", label: "List" }] as const} value={layout} onChange={setLayout} />
+        <span className="text-xs text-muted">{visible.length} sites</span>
+      </div>
     </ListFilterRow>
-    {visible.length === 0 && <EmptyState icon={Building2} message="No sites match these filters." actionLabel="Clear filters" onAction={() => { setDistrict("all"); setQuery(""); }} />}
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {visible.map(site => (
-        <article key={site.name} className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm" data-enter>
-          <div className="mb-3 flex items-start gap-3">
-            <IconTile icon={Building2} />
-            <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{site.name}</h3><p className="text-xs text-muted">{site.client} · {site.district}</p></div>
-            <StatusChip tone={site.coverage === 100 ? "success" : "warning"}>{site.coverage}% staffed</StatusChip>
-          </div>
-          <KeyValue label="Posts staffed" value={`${site.staffed} of ${site.posts}`} />
-          <KeyValue label="Benefits" value={site.scheme} />
-          <KeyValue label="Attendance boundary" value={site.polygon ? `${site.polygon.length}-corner area` : `${site.radius} m radius`} />
-          <KeyValue label="Client rating" value={ratingOf(site.name)} />
-          <div className="my-3"><ProgressBar value={site.coverage} tone={site.coverage === 100 ? "emerald" : "warn"} /></div>
-          <div className="mt-auto flex gap-2">
-            <Button variant="outline" size="sm" className="flex-1" onClick={() => onEditBoundary(site.name)}><MapPin />Edit boundary</Button>
-            <Button size="sm" className="flex-1" onClick={() => onConfigure(site.name)}>Manage site</Button>
-          </div>
-        </article>
-      ))}
-    </div>
+    {visible.length === 0 && <EmptyState icon={Building2} message="No sites match these filters." actionLabel="Clear filters" onAction={clearFilters} />}
+    {layout === "cards" ? (
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {visible.map(site => (
+          <article
+            key={site.name}
+            className="flex cursor-pointer flex-col rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:border-emerald/35 hover:bg-surface/60"
+            data-enter
+            role="button"
+            tabIndex={0}
+            onClick={() => openDetails(site.name)}
+            onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openDetails(site.name); } }}
+          >
+            <div className="mb-3 flex items-start gap-3">
+              <IconTile icon={Building2} />
+              <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{site.name}</h3><p className="text-xs text-muted">{site.client} · {site.district}</p></div>
+              <StatusChip tone={site.coverage === 100 ? "success" : "warning"}>{site.coverage}% staffed</StatusChip>
+            </div>
+            <KeyValue label="Posts staffed" value={`${site.staffed} of ${site.posts}`} />
+            <KeyValue label="Benefits" value={site.scheme} />
+            <KeyValue label="Attendance boundary" value={site.polygon ? `${site.polygon.length}-corner area` : `${site.radius} m radius`} />
+            <KeyValue label="Client rating" value={siteRating(ratings, site.name)} />
+            <div className="my-3"><ProgressBar value={site.coverage} tone={site.coverage === 100 ? "emerald" : "warn"} /></div>
+            <div className="mt-auto flex flex-col gap-2" onClick={event => event.stopPropagation()}>
+              <Button size="sm" onClick={() => openDetails(site.name)}>View details</Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" className="flex-1" onClick={event => stop(event, () => onEditBoundary(site.name))}><MapPin />Boundary</Button>
+                <Button variant="outline" size="sm" className="flex-1" onClick={event => stop(event, () => onConfigure(site.name))}>Manage</Button>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    ) : (
+      <Panel flush>
+        <DataTable
+          rows={visible}
+          rowKey={site => site.name}
+          onRowClick={site => openDetails(site.name)}
+          empty={<div className="p-4"><EmptyState icon={Building2} message="No sites match these filters." actionLabel="Clear filters" onAction={clearFilters} /></div>}
+          columns={[
+            {
+              header: "Site",
+              cell: site => (
+                <span className="inline-flex items-center gap-2">
+                  <IconTile icon={Building2} />
+                  <span>
+                    <span className="block text-sm font-medium">{site.name}</span>
+                    <small className="text-xs text-muted">{site.client}</small>
+                  </span>
+                </span>
+              ),
+            },
+            { header: "District", cell: site => site.district, hideOnMobile: true },
+            { header: "Posts", cell: site => `${site.staffed} / ${site.posts}`, hideOnMobile: true },
+            { header: "Benefits", cell: site => site.scheme, hideOnMobile: true },
+            { header: "Rating", cell: site => siteRating(ratings, site.name), hideOnMobile: true },
+            { header: "Staffing", align: "right", cell: site => <StatusChip tone={site.coverage === 100 ? "success" : "warning"}>{site.coverage}%</StatusChip> },
+          ]}
+        />
+      </Panel>
+    )}
   </>;
 }
 
-/* -------------------------------- Deployment ------------------------------- */
+/* ------------------------------ Site detail ------------------------------- */
 
-type Post = { site: string; post: string; required: number; assigned: string[]; state: string };
-const todayDate = Number(APP_TODAY.slice(8, 10));
-const weekDays = Array.from({ length: 7 }, (_, index) => todayDate - 1 + index);
-const weekdayOf = (day: number) => new Date(`2026-09-${String(day).padStart(2, "0")}T12:00:00`).toLocaleDateString("en-IN", { weekday: "short" });
-
-export function DeploymentScreen({ onAssign }: { onAssign: () => void }) {
+export function SiteDetailScreen({
+  siteName,
+  onBack,
+  onConfigure,
+  onManageDocuments,
+  onEditBoundary,
+  onCreateSop,
+  onOpenCalendar,
+  onNavigate,
+}: {
+  siteName: string | null;
+  onBack: () => void;
+  onConfigure: () => void;
+  onManageDocuments: () => void;
+  onEditBoundary: () => void;
+  onCreateSop: () => void;
+  onOpenCalendar?: () => void;
+  onNavigate?: (view: string, meta?: string | NavClickMeta) => void;
+}) {
   const notify = useToast();
-  const [day, setDay] = useState(todayDate);
-  const [managing, setManaging] = useState<Post | null>(null);
-  const [rotationOpen, setRotationOpen] = useState(false);
-  const [posts, setPosts] = useState<Post[]>([
-    { site: "TCS Technopark", post: "Block A · Day", required: 3, assigned: ["Rajeev K", "Suresh B", "Fathima N"], state: "Covered" },
-    { site: "Aster Medcity", post: "Emergency · Day", required: 2, assigned: ["Shamnad C"], state: "Vacant" },
-    { site: "Lake Palace Resort", post: "Lobby · Night", required: 2, assigned: ["Anzar M", "Reliever needed"], state: "Vacant" },
-    { site: "Lulu Mall, Kochi", post: "Loading bay · Day", required: 2, assigned: ["Hareendrakumar K", "Niyas P"], state: "Covered" },
-  ]);
-  const [changes, setChanges] = useState<GuardChangeEvent[]>(guardChanges);
-  const vacant = posts.filter(post => post.state !== "Covered").length;
+  const { ratings } = useOps();
+  const confirm = useConfirm();
+  const site = siteName ? sites.find(item => item.name === siteName) : undefined;
+  const [openSop, setOpenSop] = useState<(typeof sopDocuments)[number] | null>(null);
+  const siteDocs = siteName ? siteDocuments.filter(doc => doc.site === siteName) : [];
+  const feedback = siteName ? siteFeedback.filter(item => item.site === siteName) : [];
+  const siteSops = siteName ? sopDocuments.filter(doc => sopBelongsToSite(doc.site, siteName)) : [];
 
-  function assign(post: Post, name: string) {
-    const outgoing = post.assigned.find(entry => entry.includes("needed")) ? "Vacant post" : post.assigned[post.assigned.length - 1] ?? "Vacant post";
-    setPosts(current => current.map(item => {
-      if (item.site + item.post !== post.site + post.post) return item;
-      const filled = item.assigned.filter(entry => !entry.includes("needed")).concat(name);
-      return { ...item, assigned: filled, state: filled.length >= item.required ? "Covered" : "Vacant" };
-    }));
-    setChanges(current => [{ id: `GC-${Date.now()}`, site: post.site, post: post.post, outgoing, incoming: name, at: `${APP_TODAY} 09:30` }, ...current]);
-    setManaging(null);
-    const officer = sites.find(site => site.name === post.site)?.fieldOfficers[0] ?? "Field officer";
-    notify(`${name} assigned · ${officer} notified`);
+  const publish = async (doc: (typeof sopDocuments)[number]) => {
+    if (!await confirm({
+      title: `Send ${doc.title} to guards?`,
+      description: `Every guard posted at ${doc.site} receives an acknowledgement task for version ${doc.version}.`,
+      confirmLabel: "Send to guards",
+    })) return;
+    notify("SOP sent to guards");
+    setOpenSop(null);
+  };
+
+  if (!site || !siteName) {
+    return <>
+      <BackCrumb backLabel={NAV.sites} onBack={onBack} current="Site details" />
+      <EmptyState icon={Building2} message="This site could not be found." actionLabel="Back to sites" onAction={onBack} />
+    </>;
   }
 
   return <>
-    <PageHeader title={NAV.deployment} subtitle="Daily post coverage, 24-hour rotations and reliever allocation." actions={<Button onClick={onAssign}><Plus />Assign employee</Button>} />
-    <div className="mb-4 flex gap-2 overflow-x-auto" data-enter role="tablist" aria-label="Day">
-      {weekDays.map(value => (
-        <button key={value} type="button" role="tab" aria-selected={day === value} onClick={() => setDay(value)}
-          className={cn("flex min-w-[64px] flex-col items-center rounded-2xl border px-3 py-2 transition-colors", day === value ? "border-emerald bg-emerald text-white" : "border-border bg-card hover:bg-surface")}>
-          <span className={cn("text-[11px]", day === value ? "text-white/80" : "text-muted")}>{value === todayDate ? "Today" : weekdayOf(value)}</span>
-          <strong className="text-lg tabular-nums">{value}</strong>
-        </button>
-      ))}
-    </div>
-    <SplitLayout wideFirst>
-      <Panel title={`Post coverage · ${day} September`} description={vacant ? `${vacant} post${vacant === 1 ? "" : "s"} need cover. Fill them from the reliever pool.` : "Every post is covered."}>
-        {posts.map(post => (
-          <ListRow key={post.site + post.post}>
-            <div className="min-w-[160px] flex-1"><strong className="block text-sm">{post.site}</strong><small className="text-xs text-muted">{post.post} · {post.required} needed</small></div>
-            <div className="flex flex-1 flex-wrap gap-1">
-              {post.assigned.map(name => name.includes("needed")
-                ? <span key={name} className="rounded-md border border-dashed border-status-danger/50 px-2 py-0.5 text-xs text-status-danger">Reliever needed</span>
-                : <span key={name} className="rounded-md bg-surface px-2 py-0.5 text-xs">{name}</span>)}
-            </div>
-            <StatusChip tone={post.state === "Covered" ? "success" : "danger"}>{post.state === "Covered" ? "Covered" : "Needs cover"}</StatusChip>
-            <Button size="sm" variant="outline" onClick={() => setManaging(post)}>{post.state === "Covered" ? "Change" : "Fill post"}</Button>
-          </ListRow>
-        ))}
+    <BackCrumb backLabel={NAV.sites} onBack={onBack} current={site.name} />
+    <PageHeader
+      title={site.name}
+      subtitle={`${site.client} · ${site.district}`}
+      actions={<>
+        {onOpenCalendar && <Button variant="outline" onClick={onOpenCalendar}><CalendarDays />Attendance calendar</Button>}
+        <Button variant="outline" onClick={onEditBoundary}><MapPin />Edit boundary</Button>
+        <Button onClick={onConfigure}>Manage site</Button>
+      </>}
+    />
+    <StatStrip items={[
+      { icon: Users, value: `${site.staffed}/${site.posts}`, label: "Posts staffed", note: `${site.coverage}% coverage`, tone: site.coverage === 100 ? "green" : "orange", onClick: () => onNavigate?.("deployment", { site: site.name }), actionLabel: "Open deployment" },
+      { icon: Building2, value: site.scheme, label: "Benefit scheme", onClick: onConfigure, actionLabel: "Manage site benefits" },
+      { icon: MapPin, value: site.polygon ? `${site.polygon.length}-corner area` : `${site.radius} m radius`, label: "Attendance boundary", onClick: onEditBoundary, actionLabel: "Edit boundary" },
+      { icon: CheckCircle2, value: siteRating(ratings, site.name), label: "Client rating", onClick: () => onNavigate?.("complaints", { site: site.name }), actionLabel: "Open client complaints" },
+    ]} />
+    <SplitLayout>
+      <Panel title="Site profile">
+        <DefRows rows={[
+          { label: "Client", value: site.client },
+          { label: "District", value: site.district },
+          { label: "Required posts", value: site.posts },
+          { label: "Staffed", value: `${site.staffed} (${site.coverage}%)` },
+          { label: "Benefit scheme", value: site.scheme },
+        ]} />
       </Panel>
-      <Panel title="24-hour pair" description="One duty per day, split between two guards.">
-        <div className="mb-3 flex items-center justify-around rounded-xl bg-surface p-3 text-center">
-          <div><span className="mx-auto mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">SB</span><strong className="block text-sm">Suresh Babu</strong><small className="text-xs text-muted">16 duties</small></div>
-          <span className="text-muted">+</span>
-          <div><span className="mx-auto mb-1 flex h-10 w-10 items-center justify-center rounded-full bg-emerald text-sm font-bold text-white">RK</span><strong className="block text-sm">Rajeev Kumar</strong><small className="text-xs text-muted">15 duties</small></div>
-        </div>
-        <p className="text-sm text-muted">A 31-day month splits 16 and 15. The extra duty alternates next month so the pair stays balanced.</p>
-        <Button variant="outline" className="mt-3 w-full" onClick={() => setRotationOpen(true)}>View rotation calendar</Button>
+      <Panel title="Attendance rules">
+        <DefRows rows={[
+          { label: "Late-arrival grace", value: `${site.graceMins} min` },
+          { label: "Day presence check", value: `Every ${site.dayCheckIntervalMins} min` },
+          { label: "Night presence check", value: `Every ${site.nightCheckIntervalMins} min` },
+          { label: "Centre", value: `${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}`, mono: true },
+          { label: "Boundary", value: site.polygon ? `${site.polygon.length}-corner polygon` : `${site.radius} m radius` },
+        ]} />
       </Panel>
     </SplitLayout>
-    <Panel title="Recent guard changes" description={`Every change notifies the site's ${ROLE_TERMS.fieldOfficer.toLowerCase()}.`}>
-      {changes.length === 0 && <p className="text-sm text-muted">No guard changes recorded.</p>}
-      {changes.map(change => (
-        <ListRow key={change.id}>
-          <div className="min-w-[140px] flex-1"><strong className="block text-sm">{change.site}</strong><small className="text-xs text-muted">{change.post}</small></div>
-          <span className="flex-1 text-sm">{change.outgoing} <ChevronRight className="inline h-3.5 w-3.5 text-emerald" /> <strong>{change.incoming}</strong></span>
-          <span className="font-mono text-xs text-muted">{change.at}</span>
-        </ListRow>
-      ))}
+    <Panel title="Attendance boundary" description="Guards must punch inside this area."
+      action={<Button variant="outline" size="sm" onClick={onEditBoundary}><MapPin />Edit</Button>}>
+      <GeoMap center={{ lat: site.lat, lng: site.lng }} radius={site.radius} polygon={site.polygon} />
     </Panel>
-    {managing && <AssignmentDrawer post={managing} onAssign={assign} onClose={() => setManaging(null)} />}
-    {rotationOpen && <RotationDrawer onClose={() => setRotationOpen(false)} />}
+    <SplitLayout>
+      <Panel title="Field officers" description="Ordered assignment. FO 1 is notified first.">
+        {site.fieldOfficers.length === 0
+          ? <EmptyState icon={Users} message="No field officers assigned." actionLabel="Manage site" onAction={onConfigure} />
+          : <DefRows rows={site.fieldOfficers.map((name, index) => ({ label: `FO ${index + 1}`, value: name }))} />}
+      </Panel>
+      <Panel title="Escalation contacts" description="Shown to guards in the mobile app.">
+        {site.escalationContacts.length === 0
+          ? <EmptyState icon={Phone} message="No escalation contacts yet." actionLabel="Manage site" onAction={onConfigure} />
+          : <DefRows rows={site.escalationContacts.map(contact => ({
+            label: contact.label,
+            value: <span className="inline-flex items-center gap-2">{contact.name} · <span className="tabular-nums">{contact.phone}</span><CallButton phone={contact.phone} name={contact.name} /></span>,
+          }))} />}
+      </Panel>
+    </SplitLayout>
+    <SplitLayout>
+      <Panel title="Site documents" description="Agreements, PCC/biodata rules and check data."
+        action={<Button variant="outline" size="sm" onClick={onManageDocuments}>Manage documents</Button>}>
+        {siteDocs.length === 0
+          ? <p className="text-sm text-muted">No documents on file.</p>
+          : <DefRows rows={siteDocs.map(doc => ({
+            label: doc.title,
+            value: doc.file
+              ? `v${doc.version} · ${formatAppDate(doc.updatedOn)} · ${doc.file.name}`
+              : `v${doc.version} · ${formatAppDate(doc.updatedOn)} · No file attached`,
+          }))} />}
+      </Panel>
+      <Panel title="Client feedback">
+        {feedback.length === 0
+          ? <p className="text-sm text-muted">No feedback recorded.</p>
+          : <div className="space-y-2">{feedback.map(item => (
+            <div key={item.id} className="rounded-xl border border-border p-3 text-sm">
+              <div className="flex justify-between"><strong>{item.satisfaction}/10</strong><span className="text-xs text-muted">{formatAppDate(item.date)}</span></div>
+              <p className="mt-1 text-muted">{item.note}</p>
+            </div>))}</div>}
+      </Panel>
+    </SplitLayout>
+    <Panel
+      title={NAV.sops}
+      description="Versioned post instructions guards must read and acknowledge for this site."
+      action={<Button onClick={onCreateSop}><Plus />New SOP</Button>}
+    >
+      {siteSops.length === 0 && (
+        <EmptyState icon={FileText} message="No SOPs for this site yet." actionLabel="New SOP" onAction={onCreateSop} />
+      )}
+      {siteSops.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {siteSops.map(doc => (
+            <article key={doc.title} className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm" data-enter>
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <IconTile icon={FileText} />
+                <StatusChip tone={doc.state === "Complete" ? "success" : "warning"}>
+                  {doc.state === "Complete" ? "All acknowledged" : "Acknowledgements pending"}
+                </StatusChip>
+              </div>
+              <h3 className="text-sm font-semibold">{doc.title}</h3>
+              <p className="mt-1 text-xs text-muted">{doc.category}</p>
+              <div className="mt-3 flex justify-between text-xs">
+                <span className="text-muted">Version {doc.version}</span>
+                <span><span className="text-muted">Acknowledged </span><strong>{doc.ack}</strong></span>
+              </div>
+              <Button variant="outline" className="mt-4" onClick={() => setOpenSop(doc)}>View SOP</Button>
+            </article>
+          ))}
+        </div>
+      )}
+    </Panel>
+    {openSop && (
+      <DetailDrawer
+        title={openSop.title}
+        subtitle={`Version ${openSop.version} · effective ${openSop.effective} · ${openSop.ack} acknowledged`}
+        onClose={() => setOpenSop(null)}
+        footer={<>
+          <Button variant="outline" onClick={() => setOpenSop(null)}>Close</Button>
+          <Button onClick={() => publish(openSop)}>Send to guards</Button>
+        </>}
+      >
+        {openSop.sections.map(section => (
+          <Section key={section.heading} title={section.heading}>
+            <ol className="list-decimal space-y-1.5 pl-5 text-sm">{section.steps.map(step => <li key={step}>{step}</li>)}</ol>
+          </Section>
+        ))}
+      </DetailDrawer>
+    )}
   </>;
 }
 
-function AssignmentDrawer({ post, onAssign, onClose }: { post: Post; onAssign: (post: Post, name: string) => void; onClose: () => void }) {
-  const relievers = employees.filter(employee => employee.status === "Reliever");
-  const [picked, setPicked] = useState<string | null>(null);
-  const filled = post.assigned.filter(entry => !entry.includes("needed"));
-  const shortfall = Math.max(0, post.required - filled.length);
-  const selected = relievers.find(employee => employee.id === picked);
-  const tier = (rate: number) => rate >= 750 ? "Specialized" : rate >= 650 ? "Skilled" : rate >= 516 ? "Statutory" : "Base";
-
-  return <DetailDrawer title={post.post} subtitle={`${post.site} · ${post.required} needed · ${shortfall} open`} onClose={onClose}
-    footer={<>
-      <Button variant="outline" onClick={onClose}>Cancel</Button>
-      <Button disabled={!selected} onClick={() => selected && onAssign(post, selected.name)}><Check />{selected ? `Assign ${selected.name.split(" ")[0]}` : "Choose a reliever"}</Button>
-    </>}>
-    <Section title="On this post">
-      <div className="flex flex-wrap gap-1">{filled.length ? filled.map(name => <span key={name} className="rounded-md bg-surface px-2 py-1 text-sm">{name}</span>) : <span className="text-sm text-status-danger">Nobody assigned</span>}</div>
-    </Section>
-    <Section title="Available relievers">
-      <div className="grid gap-2">
-        {relievers.map(employee => (
-          <button key={employee.id} type="button" onClick={() => setPicked(employee.id)} aria-pressed={picked === employee.id}
-            className={cn("flex flex-wrap items-center gap-3 rounded-xl border p-3 text-left", picked === employee.id ? "border-emerald bg-emerald/5" : "border-border hover:bg-surface")}>
-            <div className="min-w-0 flex-1"><PersonCell name={employee.name} id={employee.id} /></div>
-            <SkillTags skills={employee.skills} />
-            <span className="text-sm font-semibold tabular-nums">{rupees(employee.dailyRate ?? 0)}<small className="font-normal text-muted"> /duty</small></span>
-          </button>
-        ))}
-      </div>
-    </Section>
-    {selected && <Section title="Cost">
-      <DefRows rows={[
-        { label: "Rate per duty", value: rupees(selected.dailyRate ?? 0), mono: true },
-        { label: "Rate tier", value: tier(selected.dailyRate ?? 0) },
-        { label: "Statutory cover", value: selected.esi ? "ESI applies" : "Salary only" },
-      ]} />
-    </Section>}
-  </DetailDrawer>;
-}
+/* ---------------------------- Deployment rotation --------------------------- */
 
 const monthOptions = [
   { label: "September 2026 · 30 days", year: 2026, month: 8 },
@@ -199,7 +324,7 @@ const monthOptions = [
   { label: "October 2026 · 31 days", year: 2026, month: 9 },
 ];
 
-function RotationDrawer({ onClose }: { onClose: () => void }) {
+export function RotationDrawer({ onClose }: { onClose: () => void }) {
   const [index, setIndex] = useState(0);
   const choice = monthOptions[index];
   // The extra duty in a 31-day month alternates, so the lead flips each month.
@@ -237,42 +362,109 @@ const dutyTypeLabel = (row: DutyChangeRequest) => row.type === "ot" ? `Extra dut
 const requestTone = (status: string): StatusTone => status === "approved" ? "success" : status === "rejected" ? "danger" : "warning";
 const titleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
 
-export function DutyChangesScreen() {
+type DutyFilter = "pending" | "all" | "approved" | "ot" | "cover";
+
+const blankDutyForm = { employeeId: "", type: "replacement" as DutyChangeType, reason: "sick" as DutyChangeReason, date: APP_TODAY, hours: 2, partnerId: "", note: "" };
+
+/** Office-side entry, e.g. when a guard phones in sick. Saved as pending, then approved like any other request. */
+function NewDutyChangeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const notify = useToast();
+  const { addDutyRequest } = useOps();
+  const [form, setForm] = useState(blankDutyForm);
+  const set = (patch: Partial<typeof blankDutyForm>) => setForm(current => ({ ...current, ...patch }));
+  const staff = employees.filter(item => item.site !== "Unassigned");
+  const employee = employees.find(item => item.id === form.employeeId);
+  const close = () => { setForm(blankDutyForm); onClose(); };
+  const save = () => {
+    if (!employee) { notify({ message: "Choose the employee first", kind: "error" }); return; }
+    addDutyRequest({
+      id: `DCR-${Date.now()}`, employeeId: employee.id, type: form.type, date: form.date, site: employee.site,
+      reason: form.type === "ot" ? "other" : form.reason, hours: form.type === "ot" ? form.hours : undefined,
+      partnerId: form.type === "swap" && form.partnerId ? form.partnerId : undefined, note: form.note, status: "pending", loggedBy: "office",
+    });
+    notify(`Duty change added for ${employee.name}`);
+    close();
+  };
+  return <Sheet open={open} title="New duty change" subtitle="Log a request on a guard's behalf, for example a sick call." onClose={close}
+    footer={<><Button variant="outline" onClick={close}>Cancel</Button><Button onClick={save}><Check />Add request</Button></>}>
+    <FormStack>
+      <Field label="Employee">
+        <Select value={form.employeeId} onChange={event => set({ employeeId: event.target.value })}>
+          <option value="">Choose an employee…</option>
+          {staff.map(item => <option key={item.id} value={item.id}>{item.name} · {item.id} · {item.site}</option>)}
+        </Select>
+      </Field>
+      <Field label="Type of change">
+        <Select value={form.type} onChange={event => set({ type: event.target.value as DutyChangeType })}>
+          <option value="replacement">Cover their duty (sick / accident)</option>
+          <option value="swap">Swap shifts with another guard</option>
+          <option value="ot">Record extra duty (OT)</option>
+        </Select>
+      </Field>
+      <FormGrid>
+        {form.type !== "ot" && <Field label="Reason">
+          <Select value={form.reason} onChange={event => set({ reason: event.target.value as DutyChangeReason })}>
+            <option value="sick">Sickness</option><option value="accident">Accident</option><option value="personal">Personal</option><option value="other">Other</option>
+          </Select>
+        </Field>}
+        {form.type === "ot" && <Field label="Extra hours"><InputAffix suffix="hours" type="number" min={1} max={12} value={form.hours} onChange={event => set({ hours: Number(event.target.value) })} /></Field>}
+        <Field label="Date"><Input type="date" value={form.date} onChange={event => set({ date: event.target.value })} /></Field>
+      </FormGrid>
+      {form.type === "swap" && <Field label="Swap with">
+        <Select value={form.partnerId} onChange={event => set({ partnerId: event.target.value })}>
+          <option value="">Any available reliever</option>
+          {staff.filter(item => item.id !== form.employeeId).map(item => <option key={item.id} value={item.id}>{item.name} · {item.site}</option>)}
+        </Select>
+      </Field>}
+      {employee && <p className="text-xs text-muted">Site: <b className="text-foreground">{employee.site}</b></p>}
+      <Field label="Details"><Textarea rows={3} value={form.note} onChange={event => set({ note: event.target.value })} placeholder="What happened, and from when is cover needed?" /></Field>
+    </FormStack>
+  </Sheet>;
+}
+
+export function DutyChangesScreen({}: { onNavigate?: (view: string, meta?: string | NavClickMeta) => void }) {
   const notify = useToast();
   const confirm = useConfirm();
-  const [rows, setRows] = useState<DutyChangeRequest[]>(dutyChangeRequests);
-  const [filter, setFilter] = useState<"pending" | "all">("pending");
+  const { dutyRequests: rows, decideDutyRequest } = useOps();
+  const [filter, setFilter] = useState<DutyFilter>("pending");
+  const [creating, setCreating] = useState(false);
   const employeeOf = (id: string) => employees.find(item => item.id === id);
   const decide = async (row: DutyChangeRequest, status: "approved" | "rejected") => {
     const name = employeeOf(row.employeeId)?.name ?? row.employeeId;
     if (status === "rejected" && !await confirm({ title: `Reject ${name}'s request?`, description: `${dutyTypeLabel(row)} on ${formatAppDate(row.date)} will be declined and ${name} notified in the app.`, confirmLabel: "Reject request", destructive: true })) return;
-    setRows(current => current.map(item => item.id === row.id ? { ...item, status } : item));
+    decideDutyRequest(row.id, status);
     notify(status === "approved"
       ? row.type === "replacement" ? "Replacement approved · reliever pool notified" : row.type === "ot" ? "Extra duty approved for payroll" : "Shift swap approved"
       : "Request rejected");
   };
   const pending = rows.filter(item => item.status === "pending");
-  const visible = filter === "pending" ? pending : rows;
+  const visible = filter === "pending" ? pending
+    : filter === "approved" ? rows.filter(item => item.status === "approved")
+      : filter === "ot" ? rows.filter(item => item.type === "ot")
+        : filter === "cover" ? rows.filter(item => item.reason === "sick" || item.reason === "accident") : rows;
+  const toggle = (next: DutyFilter) => setFilter(filter === next ? "all" : next);
   return <>
-    <PageHeader title={NAV.dutyChanges} subtitle="Shift swaps, replacement cover and extra duty (OT) requested from the guard app." />
+    <PageHeader title={NAV.dutyChanges} subtitle="Shift swaps, replacement cover and extra duty (OT) from the guard app or logged by the office."
+      actions={<Button onClick={() => setCreating(true)}><Plus />New duty change</Button>} />
+    <NewDutyChangeSheet open={creating} onClose={() => setCreating(false)} />
     <StatStrip items={[
-      { icon: Users, value: String(pending.length), label: "Awaiting decision", note: "From the guard app", tone: pending.length ? "orange" : "green" },
-      { icon: Check, value: String(rows.filter(item => item.status === "approved").length), label: "Approved", note: "This month", tone: "green" },
-      { icon: Clock, value: String(rows.filter(item => item.type === "ot").length), label: "Extra duty records", note: "OT hours" },
-      { icon: AlertTriangle, value: String(rows.filter(item => item.reason === "sick" || item.reason === "accident").length), label: "Sick or accident", note: "Cover needed", tone: "red" },
+      { icon: Users, value: String(pending.length), label: "Awaiting decision", note: "From the guard app", tone: pending.length ? "orange" : "green", onClick: () => toggle("pending"), actionLabel: "Show requests awaiting decision", active: filter === "pending" },
+      { icon: Check, value: String(rows.filter(item => item.status === "approved").length), label: "Approved", note: "This month", tone: "green", onClick: () => toggle("approved"), actionLabel: "Show approved requests", active: filter === "approved" },
+      { icon: Clock, value: String(rows.filter(item => item.type === "ot").length), label: "Extra duty records", note: "OT hours", onClick: () => toggle("ot"), actionLabel: "Show extra duty requests", active: filter === "ot" },
+      { icon: AlertTriangle, value: String(rows.filter(item => item.reason === "sick" || item.reason === "accident").length), label: "Sick or accident", note: "Cover needed", tone: "red", onClick: () => toggle("cover"), actionLabel: "Show sick or accident requests", active: filter === "cover" },
     ]} />
     <ListFilterRow>
-      <FilterChips options={[{ id: "pending", label: `Awaiting decision (${pending.length})` }, { id: "all", label: "All requests" }]} value={filter} onChange={setFilter} />
+      <FilterChips<DutyFilter> options={[{ id: "pending", label: `Awaiting decision (${pending.length})` }, { id: "approved", label: "Approved" }, { id: "ot", label: "Extra duty" }, { id: "cover", label: "Sick or accident" }, { id: "all", label: "All requests" }]} value={filter} onChange={setFilter} />
     </ListFilterRow>
     <Panel flush>
       <DataTable rows={visible} rowKey={row => row.id}
-        empty={<div className="p-4"><EmptyState icon={CheckCircle2} message={filter === "pending" ? "No requests waiting for a decision." : "No duty change requests yet."} /></div>}
+        empty={<div className="p-4"><EmptyState icon={CheckCircle2} message={filter === "pending" ? "No requests waiting for a decision." : filter === "all" ? "No duty change requests yet." : "No requests match this filter."} /></div>}
         columns={[
           { header: "Employee", cell: row => { const employee = employeeOf(row.employeeId); return <PersonCell name={employee?.name ?? row.employeeId} id={row.employeeId} phone={employee?.phone} />; } },
-          { header: "Request", cell: row => <span><strong className="block text-sm">{dutyTypeLabel(row)}</strong><small className="text-xs text-muted">{titleCase(row.reason)}</small></span> },
+          { header: "Request", cell: row => <span><strong className="block text-sm font-medium">{dutyTypeLabel(row)}</strong><small className="text-xs text-muted">{titleCase(row.reason)}</small></span> },
           { header: "Date", cell: row => formatAppDate(row.date) },
           { header: "Site", cell: row => row.site, hideOnMobile: true },
-          { header: "Note", cell: row => <span className="line-clamp-2 max-w-[240px] text-xs text-muted">{row.note}</span>, hideOnMobile: true },
+          { header: "Note", cell: row => <span className="line-clamp-2 max-w-[240px] text-xs text-muted">{row.type === "swap" ? `Swap with ${employeeOf(row.partnerId ?? "")?.name ?? "any available reliever"}. ` : ""}{row.note}</span>, hideOnMobile: true },
           { header: "Status", cell: row => <StatusChip tone={requestTone(row.status)}>{titleCase(row.status)}</StatusChip> },
           { header: "Decision", align: "right", cell: row => row.status === "pending"
             ? <span className="inline-flex gap-1.5"><Button size="sm" variant="ghost" className="text-status-danger" onClick={() => decide(row, "rejected")}>Reject</Button><Button size="sm" onClick={() => decide(row, "approved")}><Check />Approve</Button></span>
@@ -284,16 +476,22 @@ export function DutyChangesScreen() {
 
 /* -------------------------------- Attendance ------------------------------- */
 
-type AttendanceTab = "Live board" | "Exceptions" | "Corrections";
+type AttendanceTab = "Live board" | "Exceptions" | "Corrections" | "Night checks";
+
 const corrections = [
   { id: "COR-1", employee: "Fathima N", empId: "BMG-2274", site: "Aster Medcity", date: "2026-09-21", original: "No punch", corrected: "09:02", reason: "Device or network failure", status: "pending" },
   { id: "COR-2", employee: "Shamnad C M", empId: "BMG-1778", site: "Caritas Hospital", date: "2026-09-20", original: "20:41", corrected: "20:02", reason: "Supervisor verified presence", status: "approved" },
 ];
 
-export function AttendanceScreen({ onCorrect }: { onCorrect: () => void }) {
+type PunchState = "all" | "On site" | "Late" | "Absent";
+
+export function AttendanceScreen({ onCorrect, onNavigate }: { onCorrect: () => void; onNavigate?: (view: string, meta?: string | NavClickMeta) => void }) {
   const notify = useToast();
   const [tab, setTab] = useState<AttendanceTab>("Live board");
+  const { nightChecks, confirmNightCheck } = useOps();
+  const nightDue = nightChecks.filter(item => item.state !== "Confirmed");
   const [duty, setDuty] = useState("all");
+  const [punchState, setPunchState] = useState<PunchState>("all");
   const [district, setDistrict] = useState("all");
   const [query, setQuery] = useState("");
   const districts = useMemo(() => Array.from(new Set(attendanceRows.map(row => siteDistrict(row.site)).filter(Boolean))), []);
@@ -301,6 +499,7 @@ export function AttendanceScreen({ onCorrect }: { onCorrect: () => void }) {
   const exceptionCount = attendanceRows.filter(row => row.state !== "On site").length;
   const rows = attendanceRows.filter(row =>
     (duty === "all" || row.duty === duty)
+    && (punchState === "all" || row.state === punchState)
     && (district === "all" || siteDistrict(row.site) === district)
     && (!q || row.employee.toLowerCase().includes(q) || row.site.toLowerCase().includes(q) || row.id.toLowerCase().includes(q))
     && (tab !== "Exceptions" || row.state !== "On site"));
@@ -311,38 +510,67 @@ export function AttendanceScreen({ onCorrect }: { onCorrect: () => void }) {
     downloadCsv(`attendance-${APP_TODAY}`, ["Employee ID", "Employee", "Site", "Shift", "Punch-in", "GPS accuracy", "Duty", "Status"], rows.map(row => [row.id, row.employee, row.site, row.shift, row.punch, row.accuracy, row.duty, row.state]));
     notify("Attendance register downloaded");
   };
+  const showState = (next: PunchState) => {
+    if (punchState === next) { setPunchState("all"); return; }
+    setPunchState(next);
+    if (tab === "Corrections" || tab === "Night checks") setTab("Live board");
+  };
+  const markPresent = (check: NightCheck) => {
+    confirmNightCheck(check.empId);
+    notify(`Presence recorded for ${check.employee}`);
+  };
+  const nightRows = nightChecks.filter(row =>
+    (district === "all" || siteDistrict(row.site) === district)
+    && (!q || row.employee.toLowerCase().includes(q) || row.site.toLowerCase().includes(q) || row.empId.toLowerCase().includes(q)));
 
   return <>
     <PageHeader title={NAV.attendance} subtitle={`Live punches, duty values and exceptions for ${formatAppDate(APP_TODAY)}.`}
       actions={<><Button variant="outline" onClick={exportRegister}><Download />Export</Button><Button onClick={onCorrect}><Plus />Add correction</Button></>} />
     <StatStrip items={[
-      { icon: Check, value: "421", label: "Present", note: "93.8% on time", tone: "green" },
-      { icon: Clock, value: "7", label: "Late", note: "After the grace period", tone: "orange" },
-      { icon: AlertTriangle, value: "21", label: "Absent", note: "7 posts left empty", tone: "red" },
-      { icon: Timer, value: "6", label: "Night checks due", note: "Next 30 minutes" },
+      { icon: Check, value: "421", label: "Present", note: "93.8% on time", tone: "green", onClick: () => showState("On site"), actionLabel: "Show guards on site", active: punchState === "On site" },
+      { icon: Clock, value: "7", label: "Late", note: "After the grace period", tone: "orange", onClick: () => showState("Late"), actionLabel: "Show late guards", active: punchState === "Late" },
+      { icon: AlertTriangle, value: "21", label: "Absent", note: "7 posts left empty", tone: "red", onClick: () => showState("Absent"), actionLabel: "Show absent guards", active: punchState === "Absent" },
+      { icon: Timer, value: String(nightDue.length), label: "Night checks due", note: `${nightChecks.filter(item => item.state === "Missed").length} missed`, tone: nightDue.some(item => item.state === "Missed") ? "red" : undefined, onClick: () => setTab(tab === "Night checks" ? "Live board" : "Night checks"), actionLabel: "Show night checks", active: tab === "Night checks" },
     ]} />
     <SegmentedControl options={[
       { id: "Live board", label: "Live board" },
       { id: "Exceptions", label: `Exceptions (${exceptionCount})` },
       { id: "Corrections", label: `Corrections (${corrections.length})` },
+      { id: "Night checks", label: `Night checks (${nightDue.length})` },
     ] as const} value={tab} onChange={setTab} />
     <SearchBar value={query} onChange={setQuery} placeholder="Search by employee, ID or site" />
     <div className="mb-4 flex flex-wrap items-center gap-2" data-enter>
       <Select className="h-9 w-auto" value={district} onChange={event => setDistrict(event.target.value)} aria-label="District">
         <option value="all">All districts</option>{districts.map(item => <option key={item}>{item}</option>)}
       </Select>
-      {tab !== "Corrections" && <Select className="h-9 w-auto" value={duty} onChange={event => setDuty(event.target.value)} aria-label="Duty value">
+      {tab !== "Corrections" && tab !== "Night checks" && <Select className="h-9 w-auto" value={duty} onChange={event => setDuty(event.target.value)} aria-label="Duty value">
         <option value="all">All duty values</option>{["0.00", "0.50", "0.75", "1.00", "1.50"].map(value => <option key={value}>{value}</option>)}
       </Select>}
-      {(district !== "all" || duty !== "all" || query) && <Button variant="ghost" size="sm" onClick={() => { setDistrict("all"); setDuty("all"); setQuery(""); }}>Clear filters</Button>}
+      {tab !== "Corrections" && tab !== "Night checks" && <Select className="h-9 w-auto" value={punchState} onChange={event => setPunchState(event.target.value as PunchState)} aria-label="Punch status">
+        <option value="all">All statuses</option>{(["On site", "Late", "Absent"] as const).map(value => <option key={value}>{value}</option>)}
+      </Select>}
+      {(district !== "all" || duty !== "all" || punchState !== "all" || query) && <Button variant="ghost" size="sm" onClick={() => { setDistrict("all"); setDuty("all"); setPunchState("all"); setQuery(""); }}>Clear filters</Button>}
+      {tab === "Night checks" && onNavigate && <Button variant="ghost" size="sm" onClick={() => onNavigate("night-vigilance")}><Settings />Check policy</Button>}
       <span className="ml-auto text-xs text-muted">Live as of 09:24</span>
     </div>
     <Panel flush>
-      {tab === "Corrections"
+      {tab === "Night checks"
+        ? <DataTable rows={nightRows} rowKey={row => row.empId}
+          empty={<div className="p-4"><EmptyState icon={CheckCircle2} title="No night checks" message="No checks match these filters." /></div>}
+          columns={[
+            { header: "Employee", cell: row => <PersonCell name={row.employee} id={row.empId} phone={phoneOf(row.empId)} /> },
+            { header: "Site", cell: row => row.site },
+            { header: "Due", cell: row => <span className="tabular-nums">{row.due}</span> },
+            { header: "Status", cell: row => <StatusChip tone={row.state === "Confirmed" ? "success" : row.state === "Missed" ? "danger" : row.state === "Due now" ? "warning" : "neutral"}>{row.state}</StatusChip> },
+            { header: "", align: "right", cell: row => row.state === "Confirmed"
+              ? <span className="inline-flex items-center gap-1 text-xs text-muted"><CheckCircle2 size={14} />Confirmed</span>
+              : <Button size="sm" variant={row.state === "Upcoming" ? "outline" : "default"} onClick={() => markPresent(row)}><Crosshair />Mark present</Button> },
+          ]} />
+        : tab === "Corrections"
         ? <DataTable rows={correctionRows} rowKey={row => row.id}
           empty={<div className="p-4"><EmptyState icon={CalendarCheck} message="No corrections match these filters." actionLabel="Add correction" onAction={onCorrect} /></div>}
           columns={[
-            { header: "Employee", cell: row => <PersonCell name={row.employee} id={row.empId} /> },
+            { header: "Employee", cell: row => <PersonCell name={row.employee} id={row.empId} phone={phoneOf(row.empId)} /> },
             { header: "Date", cell: row => formatAppDate(row.date) },
             { header: "Site", cell: row => row.site, hideOnMobile: true },
             { header: "Original", cell: row => <span className="text-muted line-through decoration-muted/60">{row.original}</span> },
@@ -353,7 +581,7 @@ export function AttendanceScreen({ onCorrect }: { onCorrect: () => void }) {
         : <DataTable rows={rows} rowKey={row => row.id}
           empty={<div className="p-4"><EmptyState icon={CheckCircle2} title={tab === "Exceptions" ? "No exceptions" : "No punches found"} message={tab === "Exceptions" ? "Every punch on this filter is clean." : "Try a different search or filter."} /></div>}
           columns={[
-            { header: "Employee", cell: row => <PersonCell name={row.employee} id={row.id} /> },
+            { header: "Employee", cell: row => <PersonCell name={row.employee} id={row.id} phone={phoneOf(row.id)} /> },
             { header: "Site", cell: row => row.site },
             { header: "Shift", cell: row => row.shift, hideOnMobile: true },
             { header: "Punch-in", cell: row => <span className="tabular-nums">{row.punch}</span> },
@@ -383,12 +611,16 @@ const foTaskLabels: Record<FoTask["kind"], string> = {
 };
 const visitTone = (status: string): StatusTone => status === "Completed" ? "success" : status === "Due now" ? "warning" : "info";
 
-export function InspectionsScreen({ onLog }: { onLog: () => void }) {
+type RouteFilter = "all" | "Completed" | "Upcoming";
+
+export function InspectionsScreen({ onLog, onNavigate }: { onLog: () => void; onNavigate?: (view: string, meta?: string | NavClickMeta) => void }) {
   const notify = useToast();
   const confirm = useConfirm();
   const [visit, setVisit] = useState<(typeof inspections)[number] | null>(null);
   const [checklist, setChecklist] = useState(defaultChecklist);
   const [editing, setEditing] = useState(false);
+  const [routeFilter, setRouteFilter] = useState<RouteFilter>("all");
+  const route = inspections.filter(item => routeFilter === "all" || item.status === routeFilter);
   const officers = useMemo(() => Array.from(new Set(foTasks.map(task => task.officer))), []);
   const [officer, setOfficer] = useState(officers[0] ?? "");
   const [tasks, setTasks] = useState<FoTask[]>(foTasks);
@@ -401,18 +633,19 @@ export function InspectionsScreen({ onLog }: { onLog: () => void }) {
   return <>
     <PageHeader title={NAV.inspections} subtitle={`${ROLE_TERMS.fieldOfficer} site visits, verification punches and follow-up tasks.`} actions={<Button onClick={onLog}><Navigation />Log a visit</Button>} />
     <StatStrip items={[
-      { icon: UserCheck, value: "18", label: "Visits today", note: "14 completed" },
-      { icon: Check, value: "14", label: "Verified", note: "GPS and checklist", tone: "green" },
-      { icon: Clock, value: "3", label: "Upcoming", note: "Next at 13:00" },
-      { icon: AlertTriangle, value: "1", label: "Overdue", note: "Needs reassignment", tone: "orange" },
+      { icon: UserCheck, value: "18", label: "Visits today", note: "14 completed", onClick: () => setRouteFilter("all"), actionLabel: "Show all visits today" },
+      { icon: Check, value: "14", label: "Verified", note: "GPS and checklist", tone: "green", onClick: () => setRouteFilter(routeFilter === "Completed" ? "all" : "Completed"), actionLabel: "Show verified visits", active: routeFilter === "Completed" },
+      { icon: Clock, value: "3", label: "Upcoming", note: "Next at 13:00", onClick: () => setRouteFilter(routeFilter === "Upcoming" ? "all" : "Upcoming"), actionLabel: "Show upcoming visits", active: routeFilter === "Upcoming" },
+      { icon: AlertTriangle, value: "1", label: "Overdue", note: "Needs reassignment", tone: "orange", onClick: () => onNavigate?.("action-centre"), actionLabel: "Open action centre" },
     ]} />
     <SplitLayout wideFirst>
-      <Panel title="Today's route" description="Visits in order of their time window.">
-        {inspections.length === 0 && <p className="text-sm text-muted">No visits scheduled today.</p>}
-        {inspections.map((item, index) => (
+      <Panel title="Today's route" description="Visits in order of their time window."
+        action={routeFilter !== "all" ? <Button size="sm" variant="ghost" onClick={() => setRouteFilter("all")}>Show all</Button> : undefined}>
+        {route.length === 0 && <p className="text-sm text-muted">{routeFilter === "all" ? "No visits scheduled today." : "No visits match this filter."}</p>}
+        {route.map((item, index) => (
           <ListRow key={item.site} onClick={() => setVisit(item)}>
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy text-xs font-bold text-white">{index + 1}</span>
-            <div className="min-w-0 flex-1"><strong className="block text-sm">{item.site}</strong><small className="text-xs text-muted">{item.officer} · {item.window}</small></div>
+            <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{item.site}</strong><small className="text-xs text-muted">{item.officer} · {item.window}</small></div>
             <span className="hidden text-xs text-muted sm:inline">{item.distance}</span>
             <StatusChip tone={visitTone(item.status)}>{item.status}</StatusChip>
             <ChevronRight className="h-4 w-4 text-muted" />
@@ -445,7 +678,7 @@ export function InspectionsScreen({ onLog }: { onLog: () => void }) {
       {officerTasks.map(task => (
         <ListRow key={task.id} className={task.status === "done" ? "opacity-60" : ""}>
           <StatusChip tone="info">{foTaskLabels[task.kind]}</StatusChip>
-          <div className="min-w-0 flex-1"><strong className="block text-sm">{task.site}</strong><small className="text-xs text-muted">{task.detail}</small></div>
+          <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{task.site}</strong><small className="text-xs text-muted">{task.detail}</small></div>
           <span className="text-xs text-muted">{task.due}</span>
           <Button size="sm" variant="outline" disabled={task.status === "done"} onClick={() => completeTask(task.id)}>{task.status === "done" ? <><Check />Done</> : "Mark done"}</Button>
         </ListRow>

@@ -142,11 +142,17 @@ export function Section({ title, children, className }: { title: string; childre
 export function ListRow({ children, className, onClick, active }: { children: ReactNode; className?: string; onClick?: () => void; active?: boolean }) {
   const classes = cn(
     "flex flex-wrap items-center gap-3 border-t border-border px-1 py-3 first:border-t-0 sm:flex-nowrap",
-    onClick && "w-full cursor-pointer rounded-lg px-3 text-left hover:bg-surface",
+    onClick && "w-full cursor-pointer rounded-lg px-3 text-left hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald",
     active && "bg-emerald/5",
     className,
   );
-  if (onClick) return <button type="button" className={classes} onClick={onClick}>{children}</button>;
+  // A div with button semantics (not <button>) so rows can hold their own links, e.g. a CallButton.
+  if (onClick) return (
+    <div role="button" tabIndex={0} className={classes} onClick={onClick}
+      onKeyDown={event => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onClick(); } }}>
+      {children}
+    </div>
+  );
   return <div className={classes}>{children}</div>;
 }
 

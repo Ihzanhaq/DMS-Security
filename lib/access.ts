@@ -15,7 +15,7 @@ export type PermissionModule = {
 export const permissionModules: PermissionModule[] = [
   { key: "dashboard", label: "Dashboard and action centre", group: "Workspace", views: ["dashboard", "action-centre"] },
   { key: "workforce", label: "Employees", group: "Workspace", views: ["workforce", "employee-form"] },
-  { key: "sites", label: "Sites and posts", group: "Workspace", views: ["sites", "site-config"] },
+  { key: "sites", label: "Sites and posts", group: "Workspace", views: ["sites", "site-config", "site-detail", "site-attendance"] },
   { key: "deployment", label: "Deployment", group: "Workspace", views: ["deployment", "assignment-form"] },
   { key: "attendance", label: "Attendance and night checks", group: "Workspace", views: ["attendance", "attendance-correction", "night-vigilance"] },
   { key: "duty-changes", label: "Duty changes", group: "Workspace", views: ["duty-changes"] },
@@ -31,7 +31,7 @@ export const permissionModules: PermissionModule[] = [
   { key: "inspections", label: "Field officer inspections and tasks", group: "Compliance", views: ["inspections", "inspection-form"] },
   { key: "complaints", label: "Complaints", group: "Compliance", views: ["complaints", "complaint-form"] },
   { key: "tickets", label: "Tickets", group: "Compliance", views: ["tickets"] },
-  { key: "sops", label: "Site SOPs", group: "Compliance", views: ["sops", "sop-form"] },
+  { key: "sops", label: "Site SOPs", group: "Compliance", views: ["site-detail", "sop-form"], hint: "Managed inside each site's details page." },
   { key: "reports", label: "Reports", group: "Compliance", views: ["reports"] },
   { key: "analytics", label: "Analytics", group: "Compliance", views: ["analytics"] },
   { key: "imports", label: "Import centre", group: "Manage", views: ["imports"] },

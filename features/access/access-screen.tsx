@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Copy, Eye, Lock, Plus, RotateCcw, Save, ShieldCheck, Trash2, UserCog, Users } from "lucide-react";
+import { useMemo, useState, type FC } from "react";
+import { Copy, Eye, Lock, Plus, RotateCcw, Save, ShieldCheck, Trash2, UserCog, Users, X } from "lucide-react";
 import { useAccess } from "@/components/shared/access-context";
 import {
   Button, DataTable, DetailDrawer, EmptyState, Field, FormGrid, InlineAlert, Input, ListFilterRow, PageHeader, Panel,
@@ -13,6 +13,7 @@ import {
   type AccessRole, type AccessUser, type PermissionLevel, type PermissionMap, type PortalKind,
 } from "@/lib/access";
 import { ACTIONS, NAV } from "@/lib/labels";
+import type { NavClickMeta } from "@/lib/nav-config";
 import { cn } from "@/lib/utils";
 import type { AppView } from "@/types/domain";
 
@@ -43,7 +44,7 @@ function LevelChip({ level }: { level: PermissionLevel }) {
   return <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium", levelChipClass[level])}>{levelLabel[level]}</span>;
 }
 
-export function AccessScreen() {
+export const AccessScreen: FC<{ onNavigate?: (view: string, meta?: string | NavClickMeta) => void }> = () => {
   const { can } = useAccess();
   const [tab, setTab] = useState<"Users" | "Roles">("Users");
   const readOnly = !can("access", "edit");
@@ -51,40 +52,45 @@ export function AccessScreen() {
     <PageHeader title={NAV.access} subtitle="Roles set the baseline permissions. Individual users can be fine-tuned with overrides." />
     {readOnly && <InlineAlert tone="warning" className="mb-4">You can view access settings but not change them. Ask an administrator for edit access to Users and roles.</InlineAlert>}
     <SegmentedControl options={["Users", "Roles"] as const} value={tab} onChange={setTab} />
-    {tab === "Users" ? <UsersTab readOnly={readOnly} /> : <RolesTab readOnly={readOnly} />}
+    {tab === "Users" ? <UsersTab readOnly={readOnly} onShowRoles={() => setTab("Roles")} /> : <RolesTab readOnly={readOnly} />}
   </>;
-}
+};
 
 /* ---------------------------------- Users --------------------------------- */
 
-function UsersTab({ readOnly }: { readOnly: boolean }) {
+function UsersTab({ readOnly, onShowRoles }: { readOnly: boolean; onShowRoles: () => void }) {
   const { users, roles, currentUser, signInAs } = useAccess();
   const notify = useToast();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [overridesOnly, setOverridesOnly] = useState(false);
   const [editing, setEditing] = useState<AccessUser | null>(null);
   const roleOf = (id: string) => roles.find(role => role.id === id);
+  const hasOverrides = (user: AccessUser) => overrideCount(user, roleOf(user.roleId)) > 0;
+  const toggleStatus = (status: AccessUser["status"]) => setStatusFilter(current => current === status ? "all" : status);
 
   const visible = users.filter(user =>
     (roleFilter === "all" || user.roleId === roleFilter)
     && (statusFilter === "all" || user.status === statusFilter)
+    && (!overridesOnly || hasOverrides(user))
     && `${user.name} ${user.email} ${user.phone}`.toLowerCase().includes(query.toLowerCase()));
 
   const blankUser = (): AccessUser => ({ id: `U-${Date.now().toString().slice(-6)}`, name: "", initials: "", email: "", phone: "", roleId: "field-officer", overrides: {}, status: "active" });
 
   return <>
     <StatStrip items={[
-      { icon: Users, value: String(users.filter(user => user.status === "active").length), label: "Active users", note: `${users.length} in total` },
-      { icon: ShieldCheck, value: String(roles.length), label: "Roles", note: `${roles.filter(role => !role.builtIn).length} custom` },
-      { icon: UserCog, value: String(users.filter(user => overrideCount(user, roleOf(user.roleId)) > 0).length), label: "With overrides", note: "Fine-tuned beyond their role", tone: "orange" },
-      { icon: Lock, value: String(users.filter(user => user.status === "disabled").length), label: "Disabled", note: "Cannot sign in" },
+      { icon: Users, value: String(users.filter(user => user.status === "active").length), label: "Active users", note: `${users.length} in total`, onClick: () => toggleStatus("active"), actionLabel: "Show active users", active: statusFilter === "active" },
+      { icon: ShieldCheck, value: String(roles.length), label: "Roles", note: `${roles.filter(role => !role.builtIn).length} custom`, onClick: onShowRoles, actionLabel: "Open the Roles tab" },
+      { icon: UserCog, value: String(users.filter(hasOverrides).length), label: "With overrides", note: "Fine-tuned beyond their role", tone: "orange", onClick: () => setOverridesOnly(current => !current), actionLabel: "Show users with overrides", active: overridesOnly },
+      { icon: Lock, value: String(users.filter(user => user.status === "disabled").length), label: "Disabled", note: "Cannot sign in", onClick: () => toggleStatus("disabled"), actionLabel: "Show disabled users", active: statusFilter === "disabled" },
     ]} />
     <SearchBar value={query} onChange={setQuery} placeholder="Search by name, email or phone" />
     <ListFilterRow>
       <div className="flex flex-wrap gap-2">
         <Select className="h-9 w-auto" value={roleFilter} onChange={event => setRoleFilter(event.target.value)} aria-label="Role"><option value="all">All roles</option>{roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}</Select>
         <Select className="h-9 w-auto" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} aria-label="Status"><option value="all">Any status</option><option value="active">Active</option><option value="disabled">Disabled</option></Select>
+        {overridesOnly && <Button size="sm" variant="outline" data-allow onClick={() => setOverridesOnly(false)}><X />With overrides</Button>}
         <span className="self-center text-xs text-muted">{visible.length} users</span>
       </div>
       {!readOnly && <Button onClick={() => setEditing(blankUser())}><Plus />Add user</Button>}

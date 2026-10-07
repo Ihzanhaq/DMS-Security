@@ -1,27 +1,50 @@
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
+  Banknote,
   Building2,
   CalendarCheck,
+  CalendarX,
   ChartBar,
   ClipboardList,
   FileText,
   HandCoins,
+  HeartHandshake,
   LayoutDashboard,
   ListChecks,
+  LogOut,
   MapPin,
   MessageSquare,
+  MessageSquareWarning,
+  Moon,
   Package,
+  Receipt,
+  Repeat,
+  Scale,
   Settings,
   Shield,
+  ShieldCheck,
+  Upload,
+  UserPlus,
   UserRound,
   Users,
   Wallet,
 } from "lucide-react";
 import { NAV } from "@/lib/labels";
+import { REPORT_CATALOG } from "@/lib/report-catalog";
+import { SETTINGS_CATALOG } from "@/lib/settings-catalog";
 import type { AppView } from "@/types/domain";
 
-export type NavLink = { label: string; view: AppView; badge?: number };
+export type NavClickMeta = { report?: string; settingsGroup?: string; site?: string };
+
+export type NavLink = {
+  label: string;
+  view: AppView;
+  icon: LucideIcon;
+  badge?: number;
+  report?: string;
+  settingsGroup?: string;
+};
 export type NavModule = {
   id: string;
   title: string;
@@ -33,13 +56,10 @@ export type NavModule = {
 export const internalModules: NavModule[] = [
   {
     id: "overview",
-    title: "Overview",
-    eyebrow: "Work",
+    title: "Dashboard",
+    eyebrow: "Home",
     icon: LayoutDashboard,
-    items: [
-      { label: NAV.dashboard, view: "dashboard" },
-      { label: NAV.actionCentre, view: "action-centre" },
-    ],
+    items: [{ label: NAV.dashboard, view: "dashboard", icon: LayoutDashboard }],
   },
   {
     id: "workforce",
@@ -47,10 +67,10 @@ export const internalModules: NavModule[] = [
     eyebrow: "Work",
     icon: Users,
     items: [
-      { label: NAV.workforce, view: "workforce" },
-      { label: NAV.recruitment, view: "recruitment" },
-      { label: NAV.hrQuality, view: "hr-quality" },
-      { label: NAV.exitClearance, view: "exit-clearance" },
+      { label: NAV.workforce, view: "workforce", icon: Users },
+      { label: NAV.recruitment, view: "recruitment", icon: UserPlus },
+      { label: NAV.hrQuality, view: "hr-quality", icon: HeartHandshake },
+      { label: NAV.exitClearance, view: "exit-clearance", icon: LogOut },
     ],
   },
   {
@@ -59,11 +79,11 @@ export const internalModules: NavModule[] = [
     eyebrow: "Work",
     icon: MapPin,
     items: [
-      { label: NAV.sites, view: "sites" },
-      { label: NAV.deployment, view: "deployment" },
-      { label: NAV.attendance, view: "attendance" },
-      { label: NAV.nightChecks, view: "night-vigilance" },
-      { label: NAV.dutyChanges, view: "duty-changes" },
+      { label: NAV.sites, view: "sites", icon: Building2 },
+      { label: NAV.deployment, view: "deployment", icon: ClipboardList },
+      { label: NAV.attendance, view: "attendance", icon: CalendarCheck },
+      { label: NAV.nightChecks, view: "night-vigilance", icon: Moon },
+      { label: NAV.dutyChanges, view: "duty-changes", icon: Repeat },
     ],
   },
   {
@@ -72,11 +92,11 @@ export const internalModules: NavModule[] = [
     eyebrow: "Finance",
     icon: Wallet,
     items: [
-      { label: NAV.payroll, view: "payroll" },
-      { label: NAV.advances, view: "advances" },
-      { label: NAV.sparePayments, view: "spare-payments" },
-      { label: NAV.penalties, view: "penalties" },
-      { label: NAV.uniforms, view: "uniforms" },
+      { label: NAV.payroll, view: "payroll", icon: Wallet },
+      { label: NAV.advances, view: "advances", icon: HandCoins },
+      { label: NAV.sparePayments, view: "spare-payments", icon: Banknote },
+      { label: NAV.penalties, view: "penalties", icon: Scale },
+      { label: NAV.uniforms, view: "uniforms", icon: Package },
     ],
   },
   {
@@ -85,10 +105,9 @@ export const internalModules: NavModule[] = [
     eyebrow: "Work",
     icon: Shield,
     items: [
-      { label: NAV.inspections, view: "inspections" },
-      { label: NAV.complaints, view: "complaints" },
-      { label: NAV.tickets, view: "tickets" },
-      { label: NAV.sops, view: "sops" },
+      { label: NAV.inspections, view: "inspections", icon: ListChecks },
+      { label: NAV.complaints, view: "complaints", icon: MessageSquareWarning },
+      { label: NAV.tickets, view: "tickets", icon: MessageSquare },
     ],
   },
   {
@@ -97,10 +116,17 @@ export const internalModules: NavModule[] = [
     eyebrow: "Grow",
     icon: ChartBar,
     items: [
-      { label: NAV.reports, view: "reports" },
-      { label: NAV.analytics, view: "analytics" },
-      { label: NAV.imports, view: "imports" },
+      ...REPORT_CATALOG.map(({ name, icon }) => ({ label: name, view: "reports" as AppView, icon, report: name })),
+      { label: NAV.analytics, view: "analytics", icon: ChartBar },
+      { label: NAV.imports, view: "imports", icon: Upload },
     ],
+  },
+  {
+    id: "alerts",
+    title: "Alerts",
+    eyebrow: "Work",
+    icon: AlertTriangle,
+    items: [{ label: NAV.actionCentre, view: "action-centre", icon: AlertTriangle }],
   },
   {
     id: "admin",
@@ -108,8 +134,13 @@ export const internalModules: NavModule[] = [
     eyebrow: "Account",
     icon: Settings,
     items: [
-      { label: NAV.access, view: "access" },
-      { label: NAV.settings, view: "settings" },
+      ...SETTINGS_CATALOG.map(({ name, icon }) => ({
+        label: name,
+        view: "settings" as AppView,
+        icon,
+        settingsGroup: name,
+      })),
+      { label: NAV.access, view: "access", icon: ShieldCheck },
     ],
   },
 ];
@@ -140,18 +171,18 @@ export const guardModule: NavModule = {
   eyebrow: "Guard",
   icon: UserRound,
   items: [
-    { label: "Home", view: "guard-home" },
-    { label: "Attendance punch", view: "guard-punch" },
-    { label: "My schedule", view: "guard-schedule" },
-    { label: "Duty change", view: "guard-duty-change" },
-    { label: "Request leave", view: "guard-leave" },
-    { label: "Salary advance", view: "guard-advance" },
-    { label: "Uniform", view: "guard-uniform" },
-    { label: "Payslips", view: "guard-payslips" },
-    { label: "Site SOPs", view: "guard-sops" },
-    { label: "Help and queries", view: "guard-help" },
-    { label: "Night check", view: "guard-vigilance" },
-    { label: "My profile", view: "guard-profile" },
+    { label: "Home", view: "guard-home", icon: LayoutDashboard },
+    { label: "Attendance punch", view: "guard-punch", icon: MapPin },
+    { label: "My schedule", view: "guard-schedule", icon: CalendarCheck },
+    { label: "Duty change", view: "guard-duty-change", icon: Repeat },
+    { label: "Request leave", view: "guard-leave", icon: CalendarX },
+    { label: "Salary advance", view: "guard-advance", icon: HandCoins },
+    { label: "Uniform", view: "guard-uniform", icon: Package },
+    { label: "Payslips", view: "guard-payslips", icon: Receipt },
+    { label: "Site SOPs", view: "guard-sops", icon: FileText },
+    { label: "Help and queries", view: "guard-help", icon: MessageSquare },
+    { label: "Night check", view: "guard-vigilance", icon: Moon },
+    { label: "My profile", view: "guard-profile", icon: UserRound },
   ],
 };
 
@@ -161,10 +192,10 @@ export const clientModule: NavModule = {
   eyebrow: "Client",
   icon: Building2,
   items: [
-    { label: "Overview", view: "client-home" },
-    { label: "My sites", view: "client-sites" },
-    { label: "Complaints", view: "client-complaints" },
-    { label: "Coverage", view: "client-coverage" },
+    { label: "Overview", view: "client-home", icon: LayoutDashboard },
+    { label: "My sites", view: "client-sites", icon: Building2 },
+    { label: "Complaints", view: "client-complaints", icon: AlertTriangle },
+    { label: "Coverage", view: "client-coverage", icon: ChartBar },
   ],
 };
 
@@ -172,13 +203,15 @@ export const clientModule: NavModule = {
 export const parentView: Partial<Record<AppView, AppView>> = {
   "employee-form": "workforce",
   "site-config": "sites",
+  "site-detail": "sites",
+  "site-attendance": "site-detail",
   "assignment-form": "deployment",
   "attendance-correction": "attendance",
   "payroll-allocation": "payroll",
   "uniform-issue": "uniforms",
   "inspection-form": "inspections",
   "complaint-form": "complaints",
-  "sop-form": "sops",
+  "sop-form": "site-detail",
   "advance-form": "advances",
 };
 

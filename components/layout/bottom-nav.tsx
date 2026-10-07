@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
-import type { NavLink } from "@/lib/nav-config";
+import type { NavClickMeta, NavLink } from "@/lib/nav-config";
+import { navItemActive, navItemKey } from "@/lib/navigate-meta";
 import type { AppView } from "@/types/domain";
 import { Sheet } from "@/components/ui-kit";
 
@@ -11,12 +12,16 @@ export function BottomNav({
   items,
   moreItems,
   activeView,
+  activeReport,
+  activeSettingsGroup,
   onNavigate,
 }: {
   items: { label: string; view: AppView; icon: LucideIcon }[];
   moreItems: NavLink[];
   activeView: AppView;
-  onNavigate: (view: AppView) => void;
+  activeReport?: string;
+  activeSettingsGroup?: string;
+  onNavigate: (view: AppView, meta?: NavClickMeta) => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const primaryViews = items.map(item => item.view);
@@ -43,13 +48,22 @@ export function BottomNav({
       </nav>
       <Sheet open={moreOpen} title="All services" onClose={() => setMoreOpen(false)} side="center">
         <div className="grid gap-1">
-          {moreItems.map(item => (
-            <button key={item.view} type="button"
-              onClick={() => { onNavigate(item.view); setMoreOpen(false); }}
-              className={cn("rounded-xl px-3 py-2.5 text-left text-sm", activeView === item.view ? "bg-emerald/10 font-semibold text-emerald" : "hover:bg-surface")}>
-              {item.label}
-            </button>
-          ))}
+          {moreItems.map(item => {
+            const active = navItemActive(item, activeView, activeReport, activeSettingsGroup);
+            return (
+              <button
+                key={navItemKey(item)}
+                type="button"
+                onClick={() => {
+                  onNavigate(item.view, { report: item.report, settingsGroup: item.settingsGroup });
+                  setMoreOpen(false);
+                }}
+                className={cn("rounded-xl px-3 py-2.5 text-left text-sm", active ? "bg-emerald/10 font-semibold text-emerald" : "hover:bg-surface")}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
       </Sheet>
     </>

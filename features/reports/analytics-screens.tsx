@@ -6,9 +6,13 @@ import {
   Bar, BarChart, CartesianGrid, Legend, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis, type LabelProps,
 } from "recharts";
-import { attendanceRows, employees, monthlyPerformance, ratings, siteFeedback, sites } from "@/lib/mock-data";
+import { attendanceRows, employees, monthlyPerformance, siteFeedback, sites } from "@/lib/mock-data";
+import { useOps } from "@/components/shared/ops-context";
+import { averageRating } from "@/lib/ratings";
+import type { Rating } from "@/types/domain";
 import { PageHeader, Panel, SegmentedControl, SplitLayout, StatStrip } from "@/components/ui-kit";
 import { NAV } from "@/lib/labels";
+import type { NavClickMeta } from "@/lib/nav-config";
 
 /* Two series only, separated by hue and lightness, with a dashed secondary line
    and direct end-labels so identity never rides on color alone. */
@@ -21,27 +25,25 @@ const employeeMetrics = ["Attendance", "Punctuality", "SOP", "Rating", "Complain
 const siteMetrics = ["Coverage", "Rating", "Complaints", "Feedback"] as const;
 
 /** 1–10 score for every employee/metric pair, derived from seed data. */
-function employeeScore(employeeId: string, employeeName: string, metric: (typeof employeeMetrics)[number]): number {
+function employeeScore(ratings: Rating[], employeeId: string, employeeName: string, metric: (typeof employeeMetrics)[number]): number {
   const row = attendanceRows.find(item => item.id === employeeId);
   switch (metric) {
     case "Attendance": return row ? (row.state === "On site" ? 10 : row.state === "Late" ? 5 : 1) : 7;
     case "Punctuality": return row ? (row.punch !== "—" && row.state === "On site" ? 9 : row.state === "Late" ? 4 : 2) : 6;
     case "SOP": return (employeeName.length * 7) % 4 + 6;
     case "Rating": {
-      const scores = ratings.filter(rating => rating.targetType === "employee" && rating.targetId === employeeId).map(rating => rating.score);
-      return scores.length ? Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length) : 7;
+      return Math.round(averageRating(ratings, "employee", employeeId) ?? 7);
     }
     case "Complaints": return (employeeId.charCodeAt(4) % 3) === 0 ? 6 : 9;
   }
 }
 
-function siteScore(siteName: string, metric: (typeof siteMetrics)[number]): number {
+function siteScore(ratings: Rating[], siteName: string, metric: (typeof siteMetrics)[number]): number {
   const site = sites.find(item => item.name === siteName);
   switch (metric) {
     case "Coverage": return site ? Math.max(1, Math.round(site.coverage / 10)) : 7;
     case "Rating": {
-      const scores = ratings.filter(rating => rating.targetType === "site" && rating.targetId === siteName).map(rating => rating.score);
-      return scores.length ? Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length) : 7;
+      return Math.round(averageRating(ratings, "site", siteName) ?? 7);
     }
     case "Complaints": return siteName.includes("Skyline") || siteName.includes("TCS") ? 5 : 8;
     case "Feedback": {
@@ -86,18 +88,21 @@ const endLabel = (name: string) => function EndLabel(props: LabelProps) {
   return <text x={Number(props.x ?? 0) + 8} y={Number(props.y ?? 0) + 4} fontSize={11} fill="hsl(var(--foreground))">{name} {props.value}%</text>;
 };
 
-export function AnalyticsScreen() {
+export function AnalyticsScreen({ onNavigate }: { onNavigate?: (view: string, meta?: string | NavClickMeta) => void }) {
+  const { ratings } = useOps();
   const [heatTab, setHeatTab] = useState<"Employees" | "Sites">("Employees");
+  const go = (view: string) => onNavigate && (() => onNavigate(view));
+  const toggleSiteHeat = () => { setHeatTab(current => current === "Sites" ? "Employees" : "Sites"); requestAnimationFrame(() => document.getElementById("analytics-heatmap")?.scrollIntoView({ behavior: "smooth", block: "start" })); };
   const latest = monthlyPerformance[monthlyPerformance.length - 1];
   const previous = monthlyPerformance[monthlyPerformance.length - 2];
 
   return <>
     <PageHeader title={NAV.analytics} subtitle="Monthly trends and performance heat maps for employees and sites." />
     <StatStrip items={[
-      { icon: TrendingUp, value: `${latest.coverage}%`, label: `Coverage · ${latest.month}`, note: "Posts staffed", tone: "green" },
-      { icon: Users, value: `${latest.attendance}%`, label: `Attendance · ${latest.month}`, note: "On-time punches" },
-      { icon: AlertTriangle, value: String(latest.complaints), label: `Complaints · ${latest.month}`, note: `${previous.complaints} in ${previous.month}`, tone: "orange" },
-      { icon: Building2, value: String(sites.length), label: "Sites analysed", note: "All districts" },
+      { icon: TrendingUp, value: `${latest.coverage}%`, label: `Coverage · ${latest.month}`, note: "Posts staffed", tone: "green", onClick: go("deployment"), actionLabel: "Open deployment" },
+      { icon: Users, value: `${latest.attendance}%`, label: `Attendance · ${latest.month}`, note: "On-time punches", onClick: go("attendance"), actionLabel: "Open attendance" },
+      { icon: AlertTriangle, value: String(latest.complaints), label: `Complaints · ${latest.month}`, note: `${previous.complaints} in ${previous.month}`, tone: "orange", onClick: go("complaints"), actionLabel: "Open complaints" },
+      { icon: Building2, value: String(sites.length), label: "Sites analysed", note: "All districts", onClick: toggleSiteHeat, actionLabel: "Show the site heat map", active: heatTab === "Sites" },
     ]} />
     <SplitLayout>
       <Panel title="Coverage and attendance" description="Monthly percentage, April to September 2026.">
@@ -125,13 +130,13 @@ export function AnalyticsScreen() {
         </ResponsiveContainer>
       </Panel>
     </SplitLayout>
-    <Panel title="Performance heat map" description="Scores out of 10. Deeper green is better; hover a cell for detail.">
+    <div id="analytics-heatmap" className="scroll-mt-4"><Panel title="Performance heat map" description="Scores out of 10. Deeper green is better; hover a cell for detail.">
       <SegmentedControl options={["Employees", "Sites"] as const} value={heatTab} onChange={setHeatTab} />
       {heatTab === "Employees"
         ? <HeatMap rows={employees.slice(0, 10).map(employee => ({ key: employee.id, label: employee.name }))} columns={employeeMetrics}
-          scoreOf={(rowKey, column) => employeeScore(rowKey, employees.find(item => item.id === rowKey)?.name ?? rowKey, column)} />
-        : <HeatMap rows={sites.map(site => ({ key: site.name, label: site.name }))} columns={siteMetrics} scoreOf={siteScore} />}
+          scoreOf={(rowKey, column) => employeeScore(ratings, rowKey, employees.find(item => item.id === rowKey)?.name ?? rowKey, column)} />
+        : <HeatMap rows={sites.map(site => ({ key: site.name, label: site.name }))} columns={siteMetrics} scoreOf={(rowKey, column) => siteScore(ratings, rowKey, column)} />}
       <p className="mt-3 text-xs text-muted">Every cell shows its score, so the map stays readable in print and for colour-blind readers.</p>
-    </Panel>
+    </Panel></div>
   </>;
 }
