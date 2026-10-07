@@ -24,6 +24,8 @@ import { AccessProvider, useAccess } from "@/components/shared/access-context";
 import { OnboardingProvider, useOnboarding } from "@/components/shared/onboarding-context";
 import { OpsProvider, useOps } from "@/components/shared/ops-context";
 import { NAVIGATE_EVENT, showDesktopAlert } from "@/lib/browser-notify";
+import { statutoryNeeds, statutoryStatus } from "@/lib/pf-esi";
+import { usePayroll } from "@/components/shared/payroll-context";
 import { ToastProvider, useToast } from "@/components/shared/toast-context";
 import { ConfirmProvider } from "@/components/ui-kit";
 import { HrQualityScreen, RecruitmentScreen } from "@/features/hr/hr-quality-screens";
@@ -90,14 +92,20 @@ function HrmsShell() {
   const contentRef = useRef<HTMLDivElement>(null);
   const notify = useToast();
   const onboarding = useOnboarding();
+  const { employeeRules } = usePayroll();
 
   const notifications = useMemo(() => {
     if (portal !== "internal") return [];
     const derived = deriveNotifications({
       today: APP_TODAY,
-      employees: onboarding.allProfiles.map(item => ({
-        id: item.employeeId, name: item.name, joiningDate: item.profile.joiningDate, pfEsiDataReceived: item.profile.pfEsiDataReceived,
-      })),
+      employees: onboarding.allProfiles.map(item => {
+        const rule = employeeRules.filter(entry => entry.employeeId === item.employeeId).sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
+        const status = statutoryStatus(statutoryNeeds(employees.find(entry => entry.id === item.employeeId), rule?.pfOverride, rule?.esiOverride), item.profile.uan, item.profile.esiIpNumber);
+        return {
+          id: item.employeeId, name: item.name, joiningDate: item.profile.joiningDate,
+          pfEsiDataReceived: status.complete, needsPfEsi: status.needs.pf || status.needs.esi, missing: status.missing,
+        };
+      }),
       documents: onboarding.allProfiles.flatMap(item => item.profile.documents),
       guardChanges, spareDutyPayments, satisfactionCalls, sopEdits: [],
       pfEsiWindowDays: onboarding.config.pfEsiWindowDays,
@@ -118,7 +126,7 @@ function HrmsShell() {
         };
       });
     return [...dutyAlerts, ...derived, ...generics].filter(item => canOpen(item.targetView));
-  }, [portal, canOpen, onboarding, dutyRequests]);
+  }, [portal, canOpen, onboarding, dutyRequests, employeeRules]);
 
   // Each new bell item pops a desktop notification while this tab is in the background
   // (Settings → Notifications → Desktop alerts). Items already present when the app opened are not announced.

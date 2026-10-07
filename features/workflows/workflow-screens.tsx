@@ -22,6 +22,7 @@ import { keralaDistricts, keralaTaluks } from "@/lib/kerala-geo";
 import { useAccess } from "@/components/shared/access-context";
 import { computeAdvanceEligibility } from "@/lib/advance-calculator";
 import { APP_TODAY } from "@/lib/app-date";
+import { daysSince, isValidEsiIp, isValidUan, statutoryNeeds, statutoryStatus } from "@/lib/pf-esi";
 import { NAV, ROLE_TERMS } from "@/lib/labels";
 import type { NavClickMeta } from "@/lib/nav-config";
 import { cn } from "@/lib/utils";
@@ -60,19 +61,21 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
   const homeDistrict = employee?.district ?? "";
   const [district, setDistrict] = useState(homeDistrict);
   const [joiningDate, setJoiningDate] = useState(isNew ? APP_TODAY : savedProfile.joiningDate);
-  const [pfEsiReceived, setPfEsiReceived] = useState(savedProfile.pfEsiDataReceived);
+  const [uan, setUan] = useState(savedProfile.uan ?? "");
+  const [esiIp, setEsiIp] = useState(savedProfile.esiIpNumber ?? "");
   const [prefDistrict, setPrefDistrict] = useState(savedProfile.workPreference.district || homeDistrict);
   const [prefTaluk, setPrefTaluk] = useState(savedProfile.workPreference.taluk || ((keralaTaluks[savedProfile.workPreference.district || homeDistrict] ?? [])[0] ?? ""));
   const [sizes, setSizes] = useState(savedProfile.uniformSizes);
   const [customValues, setCustomValues] = useState(savedProfile.customFields);
   const [docs, setDocs] = useState<EmployeeDocument[]>(() => withChecklist(targetEmployeeId, savedProfile.documents, config.documentChecklist));
   const [nominee, setNominee] = useState(savedProfile.nominee);
-  const pfEsiOverdue = !pfEsiReceived && (Date.parse(APP_TODAY) - Date.parse(joiningDate)) / 86400000 >= config.pfEsiWindowDays;
+  const statutory = statutoryStatus(statutoryNeeds(employee, pfOverride, esiOverride), uan, esiIp);
+  const pfEsiOverdue = !statutory.complete && daysSince(joiningDate, APP_TODAY) >= config.pfEsiWindowDays;
 
   const saveEmployee = () => {
     updateEmployeeRule({ employeeId: targetEmployeeId, effectiveFrom, basis: payBasis, monthlySalary: payBasis === "monthly" ? amount : undefined, dailyRate: payBasis === "daily" ? amount : undefined, payableDays, pfOverride, esiOverride });
     onboarding.saveProfile(targetEmployeeId, {
-      joiningDate, pfEsiDataReceived: pfEsiReceived,
+      joiningDate, pfEsiDataReceived: statutory.complete, uan: uan.replace(/\s/g, ""), esiIpNumber: esiIp.replace(/\s/g, ""),
       workPreference: { district: prefDistrict, taluk: prefTaluk },
       uniformSizes: sizes, nominee, customFields: customValues, documents: docs,
     });
@@ -104,12 +107,16 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
               {districts.map(item => <option key={item}>{item}</option>)}
             </Select>
           </Field>
-          <Field label="Joining date" hint={`PF/ESI data must reach HR within ${config.pfEsiWindowDays} days of joining.`}>
+          <Field label="Joining date" hint={statutory.needs.pf || statutory.needs.esi ? `PF/ESI numbers are due within ${config.pfEsiWindowDays} days of joining.` : undefined}>
             <Input type="date" value={joiningDate} onChange={event => setJoiningDate(event.target.value)} />
           </Field>
-          <Field label="PF/ESI enrolment data">
-            <Select value={pfEsiReceived ? "yes" : "no"} onChange={event => setPfEsiReceived(event.target.value === "yes")}><option value="no">Not received</option><option value="yes">Received</option></Select>
-          </Field>
+          {statutory.needs.pf && <Field label="PF UAN" hint={uan && !isValidUan(uan) ? "A UAN has 12 digits." : "Universal Account Number, 12 digits."}>
+            <Input value={uan} onChange={event => setUan(event.target.value.replace(/[^\d\s]/g, ""))} inputMode="numeric" maxLength={14} placeholder="e.g. 101012345678" aria-invalid={!!uan && !isValidUan(uan)} />
+          </Field>}
+          {statutory.needs.esi && <Field label="ESI IP number" hint={esiIp && !isValidEsiIp(esiIp) ? "An ESI IP number has 10 digits." : "Insurance Person number, 10 digits."}>
+            <Input value={esiIp} onChange={event => setEsiIp(event.target.value.replace(/[^\d\s]/g, ""))} inputMode="numeric" maxLength={12} placeholder="e.g. 3112345678" aria-invalid={!!esiIp && !isValidEsiIp(esiIp)} />
+          </Field>}
+          {!statutory.needs.pf && !statutory.needs.esi && <Field label="PF/ESI"><Input value="Not applicable for this employee" disabled /></Field>}
           <Field label="Employment status">
             <Select defaultValue={employee?.status === "Leave" ? "On leave" : employee?.status ?? "Active"}><option>Active</option><option>Reliever</option><option>On leave</option><option>Exit initiated</option></Select>
           </Field>
@@ -129,7 +136,7 @@ export function EmployeeFormScreen({ onBack, onImport, employeeId }: { onBack: (
           <Field label="Trouser size"><Select value={sizes.trouser} onChange={event => setSizes({ ...sizes, trouser: event.target.value })}>{["30", "32", "34", "36", "38"].map(size => <option key={size}>{size}</option>)}</Select></Field>
           <Field label="Shoe size"><Select value={sizes.shoe} onChange={event => setSizes({ ...sizes, shoe: event.target.value })}>{["6", "7", "8", "9", "10", "11"].map(size => <option key={size}>{size}</option>)}</Select></Field>
         </FormGrid>
-        {pfEsiOverdue && <InlineAlert tone="warning" className="mt-4">{`PF/ESI enrolment data has not been received and ${config.pfEsiWindowDays} days have passed since joining (${joiningDate}). HR has been alerted.`}</InlineAlert>}
+        {pfEsiOverdue && <InlineAlert tone="warning" className="mt-4">{`${statutory.missing.join(" and ")} not on file and ${config.pfEsiWindowDays} days have passed since joining (${joiningDate}). HR has been alerted.`}</InlineAlert>}
       </Panel>
 
       <Panel title="Skills and eligibility" description="Operations filter employees by these verified capabilities.">

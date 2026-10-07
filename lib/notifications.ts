@@ -1,6 +1,14 @@
 import type { AppNotification, EmployeeDocument, GuardChangeEvent, SatisfactionCall, SpareDutyPayment } from "@/types/domain";
 
-type EmployeeLite = { id: string; name: string; joiningDate: string; pfEsiDataReceived: boolean };
+type EmployeeLite = {
+  id: string; name: string; joiningDate: string;
+  /** True when every PF/ESI number the employee needs is on file. */
+  pfEsiDataReceived: boolean;
+  /** False when neither PF nor ESI applies to this employee; no reminder is raised. Defaults to true. */
+  needsPfEsi?: boolean;
+  /** Plain-language list of what's missing, e.g. ["UAN", "ESI IP number"]. */
+  missing?: string[];
+};
 export type SopEdit = { site: string; title: string; updatedOn: string; officer: string };
 
 export type NotificationInput = {
@@ -36,11 +44,11 @@ export function deriveNotifications(input: NotificationInput): AppNotification[]
   }
 
   for (const employee of input.employees) {
-    if (!employee.pfEsiDataReceived && daysBetween(employee.joiningDate, input.today) >= (input.pfEsiWindowDays ?? 15)) {
+    if (employee.needsPfEsi !== false && !employee.pfEsiDataReceived && daysBetween(employee.joiningDate, input.today) >= (input.pfEsiWindowDays ?? 15)) {
       list.push({
         id: `pfesi-${employee.id}`, kind: "pf-esi-15day",
         title: `PF/ESI data missing beyond ${input.pfEsiWindowDays ?? 15} days`,
-        detail: `${employee.name} joined ${employee.joiningDate}; enrolment details not received`,
+        detail: `${employee.name} joined ${employee.joiningDate}; ${employee.missing?.length ? `${employee.missing.join(" and ")} missing` : "enrolment details not received"}`,
         audience: ["Owner", "Branch Manager", "HR", "HR Assistant"],
         targetView: "workforce", at: input.today,
       });

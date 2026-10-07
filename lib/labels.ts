@@ -50,3 +50,16 @@ export const ACTIONS = {
   signOut: "Sign out",
   viewAs: "View as",
 } as const;
+
+/** Restores statutory acronyms after sentence-style lowercasing (e.g. settings save buttons). */
+export function preserveStatutoryAcronyms(text: string): string {
+  return text
+    .replace(/\bpf\b/gi, "PF")
+    .replace(/\besi\b/gi, "ESI")
+    .replace(/\buan\b/gi, "UAN")
+    .replace(/\bhr\b/gi, "HR");
+}
+
+export function settingsSaveButtonLabel(group: string): string {
+  return `Save ${preserveStatutoryAcronyms(group.toLowerCase())} settings`;
+}

@@ -4,6 +4,9 @@ import { useMemo, useState } from "react";
 import { LogOut, Pencil, Plus, Upload, UserCheck, UserMinus, Users } from "lucide-react";
 import { employees, relieverRates, rupees, skillOptions } from "@/lib/mock-data";
 import { useOps } from "@/components/shared/ops-context";
+import { useOnboarding } from "@/components/shared/onboarding-context";
+import { APP_TODAY } from "@/lib/app-date";
+import { daysSince, statutoryNeeds, statutoryStatus } from "@/lib/pf-esi";
 import { averageRating } from "@/lib/ratings";
 import { EmployeeRatingsPanel } from "./employee-ratings";
 import {
@@ -16,7 +19,8 @@ import { EmployeeSalaryBreakdown } from "@/features/payroll/employee-salary-brea
 import { NAV } from "@/lib/labels";
 import type { Employee } from "@/types/domain";
 
-type StatusFilter = "all" | Employee["status"];
+/** "pf-esi" lists employees who need PF/ESI but whose UAN or ESI IP number isn't on file. */
+type StatusFilter = "all" | Employee["status"] | "pf-esi";
 const statusLabel: Record<Employee["status"], string> = { Active: "Active", Leave: "On leave", Reliever: "Reliever" };
 const statusTone: Record<Employee["status"], StatusTone> = { Active: "success", Leave: "warning", Reliever: "info" };
 const overrideLabel = (value?: string) => value === "enabled" ? "Always deducted" : value === "disabled" ? "Never deducted" : "Same as site";
@@ -30,6 +34,15 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate: 
   const { ratings } = useOps();
   const ruleFor = (employeeId: string) => employeeRules.filter(rule => rule.employeeId === employeeId).sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
   const ratingFor = (employeeId: string) => averageRating(ratings, "employee", employeeId);
+  const onboarding = useOnboarding();
+  const pfEsiWindow = onboarding.config.pfEsiWindowDays;
+  const statutoryFor = (employee: Employee) => {
+    const rule = ruleFor(employee.id);
+    const profile = onboarding.getProfile(employee.id);
+    const status = statutoryStatus(statutoryNeeds(employee, rule?.pfOverride, rule?.esiOverride), profile.uan, profile.esiIpNumber);
+    return { ...status, profile, days: daysSince(profile.joiningDate, APP_TODAY) };
+  };
+  const pfEsiPending = employees.filter(employee => { const status = statutoryFor(employee); return (status.needs.pf || status.needs.esi) && !status.complete; });
   const payLabel = (employee: Employee) => {
     const rule = ruleFor(employee.id);
     return rule?.basis === "site" ? "Site-wise rate" : rule?.basis === "daily" ? `${rupees(rule.dailyRate ?? 0)} / duty` : rupees(rule?.monthlySalary ?? employee.salary);
@@ -42,9 +55,11 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate: 
   };
 
   const rows = useMemo(() => employees.filter(employee =>
-    (status === "all" || employee.status === status)
+    (status === "all" || (status === "pf-esi" ? pfEsiPending.includes(employee) : employee.status === status))
     && (skill === "all" || employee.skills.includes(skill as (typeof skillOptions)[number]))
-    && `${employee.name} ${employee.id} ${employee.site}`.toLowerCase().includes(query.toLowerCase())), [query, status, skill]);
+    && `${employee.name} ${employee.id} ${employee.site}`.toLowerCase().includes(query.toLowerCase())),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [query, status, skill, onboarding, employeeRules]);
   const filtered = status !== "all" || skill !== "all" || query;
   const reset = () => { setStatus("all"); setSkill("all"); setQuery(""); };
 
@@ -75,6 +90,18 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate: 
           <SkillTags skills={selected.skills} />
         </Panel>
         <EmployeeRatingsPanel employeeId={selected.id} className="lg:col-span-2" />
+        {(() => {
+          const st = statutoryFor(selected);
+          const applies = st.needs.pf || st.needs.esi;
+          return <Panel title="PF and ESI" description={applies ? `Numbers are due within ${pfEsiWindow} days of joining.` : "Neither PF nor ESI applies to this employee."}
+            action={applies ? <StatusChip tone={st.complete ? "success" : st.days >= pfEsiWindow ? "danger" : "warning"}>{st.complete ? "On file" : st.days >= pfEsiWindow ? "Overdue" : "Pending"}</StatusChip> : undefined}>
+            <DefRows rows={[
+              { label: "PF", value: st.needs.pf ? (st.profile.uan ? <span className="font-mono">{st.profile.uan}</span> : <span className="text-status-danger">UAN missing</span>) : "Not applicable" },
+              { label: "ESI", value: st.needs.esi ? (st.profile.esiIpNumber ? <span className="font-mono">{st.profile.esiIpNumber}</span> : <span className="text-status-danger">IP number missing</span>) : "Not applicable" },
+              { label: "Joined", value: `${st.profile.joiningDate} · ${st.days} days ago` },
+            ]} />
+          </Panel>;
+        })()}
         <Panel title="Pay settings" className="lg:col-span-2">
           <div className="max-w-xl">
             <DefRows rows={[
@@ -104,13 +131,14 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate: 
     ]} />
     <SearchBar value={query} onChange={setQuery} placeholder="Search by name, employee ID or site" />
     <ListFilterRow>
-      <FilterChips<StatusFilter> options={[{ id: "all", label: "Everyone" }, { id: "Active", label: "Active" }, { id: "Leave", label: "On leave" }, { id: "Reliever", label: "Relievers" }]} value={status} onChange={setStatus} />
+      <FilterChips<StatusFilter> options={[{ id: "all", label: "Everyone" }, { id: "Active", label: "Active" }, { id: "Leave", label: "On leave" }, { id: "Reliever", label: "Relievers" }, { id: "pf-esi", label: `PF/ESI pending (${pfEsiPending.length})` }]} value={status} onChange={setStatus} />
       <div className="flex items-center gap-2">
         <Select className="h-9 w-auto" value={skill} onChange={event => setSkill(event.target.value)} aria-label="Skill"><option value="all">Any skill</option>{skillOptions.map(item => <option key={item}>{item}</option>)}</Select>
         {filtered && <Button variant="ghost" size="sm" onClick={reset}>Clear</Button>}
         <span className="text-xs text-muted">{rows.length} employees</span>
       </div>
     </ListFilterRow>
+    {status === "pf-esi" && <p className="mb-3 text-sm text-muted">Employees who need PF or ESI but don&apos;t have a valid UAN or ESI IP number on file. HR is alerted {pfEsiWindow} days after joining (Settings → Notifications). Open an employee and choose Edit employee to add the numbers.</p>}
     <Panel flush>
       <DataTable rows={rows} rowKey={row => row.id} onRowClick={setSelected}
         empty={<div className="p-4"><EmptyState icon={Users} title="No employees found" message="Try a different search, status or skill." actionLabel="Clear filters" onAction={reset} /></div>}
@@ -122,7 +150,13 @@ export function WorkforceScreen({ onNavigate, onCreate, onEdit }: { onNavigate: 
           { header: "Pay", cell: payLabel, hideOnMobile: true },
           { header: "Benefits", cell: employee => <span className="text-xs">{benefitsLabel(employee.id)}</span>, hideOnMobile: true },
           { header: "Rating", align: "right", cell: employee => { const rating = ratingFor(employee.id); return rating !== null ? <strong>{rating}/10</strong> : <span className="text-muted">—</span>; }, hideOnMobile: true },
-          { header: "Status", cell: employee => <StatusChip tone={statusTone[employee.status]}>{statusLabel[employee.status]}</StatusChip> },
+          ...(status === "pf-esi" ? [
+            { header: "Needs", cell: (employee: Employee) => { const st = statutoryFor(employee); return <span className="text-xs">{[st.needs.pf && "PF", st.needs.esi && "ESI"].filter(Boolean).join(" + ")}</span>; } },
+            { header: "Missing", cell: (employee: Employee) => <span className="text-xs font-medium text-status-danger">{statutoryFor(employee).missing.join(", ")}</span> },
+            { header: "Since joining", cell: (employee: Employee) => { const st = statutoryFor(employee); const overdue = st.days >= pfEsiWindow; return <StatusChip tone={overdue ? "danger" : "warning"}>{st.days} {st.days === 1 ? "day" : "days"}{overdue ? " · overdue" : ""}</StatusChip>; } },
+          ] : [
+            { header: "Status", cell: (employee: Employee) => <StatusChip tone={statusTone[employee.status]}>{statusLabel[employee.status]}</StatusChip> },
+          ]),
         ]} />
     </Panel>
 

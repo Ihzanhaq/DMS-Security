@@ -15,7 +15,12 @@ export type OnboardingConfig = {
 
 export type OnboardingProfile = {
   joiningDate: string;
+  /** True when every PF/ESI number this employee needs is on file (worked out from the numbers on save). */
   pfEsiDataReceived: boolean;
+  /** PF Universal Account Number, 12 digits. */
+  uan?: string;
+  /** ESI Insurance Person number, 10 digits. */
+  esiIpNumber?: string;
   workPreference: WorkPreference;
   uniformSizes: UniformSizes;
   nominee: Nominee;
@@ -41,6 +46,9 @@ function seedProfile(employeeId: string, checklist: string[]): OnboardingProfile
   return {
     joiningDate: employee?.joiningDate ?? "2026-09-22",
     pfEsiDataReceived: employee?.pfEsiDataReceived ?? false,
+    // Demo numbers for employees whose enrolment data is already on file.
+    uan: employee?.pfEsiDataReceived && employee.pf ? `1010${employee.id.replace(/\D/g, "").padStart(4, "0")}5678` : "",
+    esiIpNumber: employee?.pfEsiDataReceived && employee.esi ? `31${employee.id.replace(/\D/g, "").padStart(4, "0")}6789` : "",
     workPreference: employee?.workPreference ?? { district: employee?.district ?? "Ernakulam", taluk: "" },
     uniformSizes: employee?.uniformSizes ?? { shirt: "L", trouser: "34", shoe: "9" },
     nominee: employee?.nominee ?? { name: "", relation: "Spouse", phone: "", address: "", bankAccount: "", ifsc: "", photoOnFile: false },

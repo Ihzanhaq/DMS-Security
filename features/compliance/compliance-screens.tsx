@@ -27,7 +27,7 @@ import { useOps } from "@/components/shared/ops-context";
 import { HR_RATING_TYPE } from "@/lib/ratings";
 import { showDesktopAlert } from "@/lib/browser-notify";
 import { setAccessibilityPreference } from "@/lib/accessibility-preferences";
-import { NAV } from "@/lib/labels";
+import { NAV, settingsSaveButtonLabel } from "@/lib/labels";
 import type { NavClickMeta } from "@/lib/nav-config";
 import { DEFAULT_REPORT_NAME, type ReportName } from "@/lib/report-catalog";
 import { type SettingsGroup } from "@/lib/settings-catalog";
@@ -567,7 +567,7 @@ export function SettingsScreen({ group }: { group: SettingsGroup }) {
     <PageHeader
       title={group}
       subtitle="Organization defaults. Clients, sites, posts and employees can override them."
-      actions={autoSaved ? undefined : <Button onClick={() => notify(`${group} settings saved`)}><CheckCircle2 />Save {group.toLowerCase()} settings</Button>}
+      actions={autoSaved ? undefined : <Button onClick={() => notify(`${group} settings saved`)}><CheckCircle2 />{settingsSaveButtonLabel(group)}</Button>}
     />
     <Panel description={autoSaved ? "Changes here save automatically." : "Organization default · effective 1 September 2026"}>
         {group === "Organization" && <FormGrid>
@@ -612,6 +612,9 @@ export function SettingsScreen({ group }: { group: SettingsGroup }) {
           <Section title="Alert rules" className="mb-0 border-t border-border pt-4">
             <p className="text-sm text-muted">Which events raise an alert. Saved with the button above.</p>
           </Section>
+          <Field label="PF/ESI number reminder" hint="HR is alerted when an employee who needs PF or ESI still has no UAN or ESI IP number this many days after joining. Saves immediately.">
+            <InputAffix suffix="days after joining" type="number" min={1} value={onboarding.config.pfEsiWindowDays} onChange={event => onboarding.saveConfig({ ...onboarding.config, pfEsiWindowDays: Math.max(1, Number(event.target.value) || 1) })} />
+          </Field>
           <ToggleRow title="9:00 AM missing-login alert" description="Send the absence report to HR." defaultChecked />
           <ToggleRow title="Immediate vacancy alert" description="Notify district operations when leave or absence leaves a post empty." defaultChecked />
           <ToggleRow title="Missed night check escalation" description="Escalate after the response window." defaultChecked />
@@ -647,9 +650,7 @@ export function SettingsScreen({ group }: { group: SettingsGroup }) {
             </div>
             <Button variant="outline" size="sm" className="mt-3" onClick={() => setFieldDefs(current => [...current, { key: `field-${Date.now()}`, label: "New field", kind: "text" }])}><Plus />Add field</Button>
           </Section>
-          <Field label="PF/ESI data reminder" hint="HR is alerted if enrolment data hasn't arrived within this many days of joining.">
-            <InputAffix suffix="days" type="number" min={1} value={onboarding.config.pfEsiWindowDays} onChange={event => onboarding.saveConfig({ ...onboarding.config, pfEsiWindowDays: Math.max(1, Number(event.target.value) || 1) })} />
-          </Field>
+          <p className="text-xs text-muted">The PF/ESI number reminder is set in Settings → Notifications.</p>
         </FormStack>}
         {group === "Ratings" && <RatingTypesSettings />}
         {group === "Accessibility" && <FormStack>

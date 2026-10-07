@@ -37,6 +37,15 @@ describe("deriveNotifications", () => {
     expect(received.some(item => item.kind === "pf-esi-15day")).toBe(false);
   });
 
+  it("skips the PF/ESI reminder for employees who need neither, and names missing numbers", () => {
+    const base = { today, documents: [], guardChanges: [], spareDutyPayments: [], satisfactionCalls: [], sopEdits: [] };
+    const exempt = deriveNotifications({ ...base, employees: [{ id: "E1", name: "A", joiningDate: "2026-09-01", pfEsiDataReceived: false, needsPfEsi: false }] });
+    expect(exempt.some(item => item.kind === "pf-esi-15day")).toBe(false);
+    const missing = deriveNotifications({ ...base, employees: [{ id: "E2", name: "B", joiningDate: "2026-09-01", pfEsiDataReceived: false, needsPfEsi: true, missing: ["UAN", "ESI IP number"] }] })
+      .find(item => item.kind === "pf-esi-15day");
+    expect(missing?.detail).toContain("UAN and ESI IP number missing");
+  });
+
   it("honours a configured PF/ESI window", () => {
     const base = { today, documents: [], guardChanges: [], spareDutyPayments: [], satisfactionCalls: [], sopEdits: [],
       employees: [{ id: "E1", name: "A", joiningDate: "2026-09-12", pfEsiDataReceived: false }] };
