@@ -177,7 +177,10 @@ export function canOpenView(permissions: PermissionSet, view: AppView) {
 
 export function canEditView(permissions: PermissionSet, view: AppView) {
   const entry = moduleForView(view);
-  return entry ? canModule(permissions, entry.key, "edit") : false;
+  if (!entry) return false;
+  // View-only modules (dashboard) have nothing to lock, so opening them is never "read-only".
+  if (entry.actions.every(action => action === "view")) return canModule(permissions, entry.key, "view");
+  return canModule(permissions, entry.key, "edit");
 }
 
 /** Opening screens in sidebar order, used when the configured default is no longer allowed. */
@@ -299,6 +302,9 @@ export const seedRoles: AccessRole[] = [
   { id: "guard", name: "Guard", description: "Mobile app: attendance, requests, payslips and SOPs.", kind: "guard", defaultView: "guard-home", permissions: [], builtIn: true },
   { id: "client", name: "Client", description: "Client portal: sites, coverage and complaints.", kind: "client", defaultView: "client-home", permissions: [], builtIn: true },
 ];
+
+/** Prototype has no auth backend: every account signs in with this demo password. */
+export const DEMO_PASSWORD = "Bmg@2026";
 
 export const seedUsers: AccessUser[] = [
   { id: "U-001", name: "Arun Kumar", initials: "AK", email: "arun@bmgsecurity.in", phone: "98470 10001", roleId: "owner", status: "active" },

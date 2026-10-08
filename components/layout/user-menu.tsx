@@ -1,26 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { LogOut, UserRound } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { ACTIONS } from "@/lib/labels";
-import { cn } from "@/lib/utils";
+
+export type MenuUser = { id: string; name: string; roleId: string; status: string; initials?: string; email?: string; phone?: string };
 
 export function UserMenu({
   users,
   roles,
   currentUserId,
-  onViewAs,
   onSignOut,
 }: {
-  users: { id: string; name: string; roleId: string; status: string; initials?: string }[];
+  users: MenuUser[];
   roles: { id: string; name: string }[];
   currentUserId: string;
-  onViewAs: (userId: string) => void;
   onSignOut: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const current = users.find(u => u.id === currentUserId);
+  const roleName = roles.find(role => role.id === current?.roleId)?.name;
   const initials = current?.initials ?? current?.name.slice(0, 2).toUpperCase() ?? "?";
+  const contact = current?.email || current?.phone;
 
   return (
     <div className="relative">
@@ -30,54 +31,39 @@ export function UserMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={current ? `Account: ${current.name}` : "Account"}
-        className="flex h-9 w-9 items-center justify-center rounded-full bg-navy text-sm font-semibold text-white shadow-sm ring-offset-2 ring-offset-card transition hover:bg-navy/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald"
+        title={contact || "Account"}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-navy text-sm font-semibold text-white shadow-sm ring-offset-2 ring-offset-card transition hover:ring-2 hover:ring-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald"
       >
         {initials}
       </button>
       {open && (
         <>
           <button type="button" className="fixed inset-0 z-40" aria-label="Close menu" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-12 z-50 w-72 rounded-2xl border border-border bg-card p-2 shadow-xl">
-            <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted">{ACTIONS.viewAs}</p>
-            <div className="max-h-48 overflow-y-auto">
-              {roles.map(role => {
-                const members = users.filter(u => u.roleId === role.id && u.status === "active");
-                if (!members.length) return null;
-                return (
-                  <div key={role.id} className="mb-2">
-                    <p className="px-3 py-1 text-[11px] font-medium text-muted">{role.name}</p>
-                    {members.map(user => (
-                      <button
-                        key={user.id}
-                        type="button"
-                        onClick={() => {
-                          onViewAs(user.id);
-                          setOpen(false);
-                        }}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-surface",
-                          user.id === currentUserId && "bg-emerald/10 font-medium text-emerald",
-                        )}
-                      >
-                        <UserRound className="h-4 w-4 shrink-0" />
-                        {user.name}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
+          <div role="menu" className="absolute right-0 top-12 z-50 w-72 overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+            <div className="flex items-center gap-3 border-b border-border p-4">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-navy text-base font-semibold text-white">{initials}</span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-foreground">{current?.name}</span>
+                {contact && <span className="block truncate text-xs text-muted">{contact}</span>}
+                {roleName && (
+                  <span className="mt-1 inline-block rounded-full bg-emerald/10 px-2 py-0.5 text-[11px] font-medium text-emerald">{roleName}</span>
+                )}
+              </span>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                onSignOut();
-                setOpen(false);
-              }}
-              className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-status-danger hover:bg-status-danger/10"
-            >
-              <LogOut className="h-4 w-4" />
-              {ACTIONS.signOut}
-            </button>
+            <div className="p-2">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onSignOut();
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-status-danger hover:bg-status-danger/10"
+              >
+                <LogOut className="h-4 w-4" />
+                {ACTIONS.signOut}
+              </button>
+            </div>
           </div>
         </>
       )}

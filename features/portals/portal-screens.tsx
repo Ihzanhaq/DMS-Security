@@ -399,7 +399,7 @@ function GuardPunch() {
           </div>
           {geo === "outside" && distance !== null && <InlineAlert tone="warning">{guardSite.polygon ? "Move inside the marked area, or ask your supervisor to record a manual punch." : `You are ${distance - guardSite.radius} m outside the boundary. Move closer to the post, or ask your supervisor to record a manual punch.`}</InlineAlert>}
           {position && position.accuracy > 50 && geo === "inside" && <InlineAlert tone="warning">GPS accuracy is ±{position.accuracy} m (limit 50 m). This punch will be flagged for review.</InlineAlert>}
-          <InlineAlert>Presence checks every <b>{guardSite.dayCheckIntervalMins} min</b> (day) and <b>{guardSite.nightCheckIntervalMins} min</b> (night). Late-arrival grace: <b>{guardSite.graceMins} min</b>.</InlineAlert>
+          <InlineAlert>Presence checks every <b>{guardSite.dayCheckIntervalMins} min</b> (day) and <b>{guardSite.nightCheckIntervalMins} min</b> (night). Late-arrival grace: <b>{guardSite.graceMins} min</b>. Patrol: <b>{guardSite.patrol.day.rounds} rounds</b> every {guardSite.patrol.day.intervalMins} min (day), <b>{guardSite.patrol.night.rounds} rounds</b> every {guardSite.patrol.night.intervalMins} min (night).</InlineAlert>
         </FormStack>
       </Panel>
     </SplitLayout>

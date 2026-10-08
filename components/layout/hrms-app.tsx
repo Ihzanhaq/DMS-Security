@@ -25,7 +25,8 @@ import {
 import { AccessScreen, isAccessTab, type AccessTab } from "@/features/access/access-screen";
 import { RoleEditorScreen } from "@/features/access/role-editor-screen";
 import { MemberAccessScreen } from "@/features/access/member-access-screen";
-import { AccessProvider, useAccess } from "@/components/shared/access-context";
+import { LoginScreen } from "@/features/access/login-screen";
+import { AccessProvider, readSession, useAccess, writeSession } from "@/components/shared/access-context";
 import { OnboardingProvider, useOnboarding } from "@/components/shared/onboarding-context";
 import { OpsProvider, useOps } from "@/components/shared/ops-context";
 import { InventoryProvider } from "@/components/shared/inventory-context";
@@ -187,9 +188,11 @@ function HrmsShell() {
   // Layout effect: state is applied before the first paint after hydration.
   /* eslint-disable react-hooks/set-state-in-effect -- browser-only URL and theme must be read after hydration */
   useLayoutEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    // ?user= deep links (test guide, "Sign in as") count as signed in.
+    if (!readSession() && !params.get("user")) setSignedOut(true);
     const savedTheme = window.localStorage.getItem("bmg-theme");
     setDark(savedTheme === "dark" || (!savedTheme && window.matchMedia("(prefers-color-scheme: dark)").matches));
-    const params = new URLSearchParams(window.location.search);
     const requested = params.get("view");
     if (requested === "sops") setView("sites");
     else if (requested) setView(requested as AppView);
@@ -282,15 +285,24 @@ function HrmsShell() {
     if (first) navigate(first.view, { report: first.report, settingsGroup: first.settingsGroup });
   };
 
-  const switchUser = (userId: string) => {
+  const switchUser = (userId: string, remember = true) => {
     const user = users.find(item => item.id === userId);
     const role = roles.find(item => item.id === user?.roleId);
     if (!user || !role) return;
     signInAs(user.id);
+    writeSession(user.id, remember);
     setGuestGuard(null);
     setSignedOut(false);
     navigate(landingView(role, effectivePermissions(role, user)));
     notify(`Signed in as ${user.name}`);
+  };
+
+  const signOut = () => {
+    writeSession(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("user");
+    window.history.replaceState({}, "", url);
+    setSignedOut(true);
   };
 
   const toggleTheme = () => {
@@ -330,33 +342,7 @@ function HrmsShell() {
   };
 
   if (signedOut) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-surface p-6">
-        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h1 className="text-xl font-semibold text-foreground">Sign in</h1>
-          <p className="mt-2 text-sm text-muted">Choose who is using BMG Security on this device.</p>
-          <div className="mt-4 grid gap-2">
-            {roles.flatMap(role => {
-              const members = users.filter(u => u.roleId === role.id && u.status === "active");
-              return members.map(user => (
-                <button
-                  key={user.id}
-                  type="button"
-                  onClick={() => switchUser(user.id)}
-                  className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-left hover:border-emerald hover:bg-emerald/5"
-                >
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-navy text-sm font-bold text-white">{user.initials}</span>
-                  <span>
-                    <strong className="block text-sm font-medium">{user.name}</strong>
-                    <small className="text-xs text-muted">{role.name}</small>
-                  </span>
-                </button>
-              ));
-            })}
-          </div>
-        </div>
-      </div>
-    );
+    return <LoginScreen users={users} onSignIn={switchUser} />;
   }
 
   const showInternalShell = portal === "internal";
@@ -397,8 +383,7 @@ function HrmsShell() {
           users={users}
           roles={roles}
           currentUserId={currentUser.id}
-          onViewAs={switchUser}
-          onSignOut={() => setSignedOut(true)}
+          onSignOut={signOut}
         />
 
         <main className="relative min-w-0 flex-1 overflow-y-auto overflow-x-hidden pb-24 md:pb-8">
@@ -424,7 +409,7 @@ function HrmsShell() {
                 notify(`Signed in as ${guard.name}`);
                 navigate("guard-home");
               },
-              onSignOut: () => setSignedOut(true),
+              onSignOut: signOut,
             })}
           </div>
         </main>

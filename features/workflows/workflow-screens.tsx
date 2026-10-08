@@ -26,7 +26,7 @@ import { daysSince, isValidEsiIp, isValidUan, statutoryNeeds, statutoryStatus } 
 import { NAV, ROLE_TERMS } from "@/lib/labels";
 import type { NavClickMeta } from "@/lib/nav-config";
 import { cn } from "@/lib/utils";
-import type { AppView, BenefitOverride, BenefitScheme, EmployeeDocument, EmployeeDocumentStatus, EscalationContact, LatLng, PayBasis, SiteDocument, SiteDocumentKind, SiteFeedback, NightCheck } from "@/types/domain";
+import type { AppView, BenefitOverride, BenefitScheme, EmployeeDocument, EmployeeDocumentStatus, EscalationContact, LatLng, PayBasis, PatrolPlan, SiteDocument, SiteDocumentKind, SiteFeedback, NightCheck } from "@/types/domain";
 
 const districts = keralaDistricts;
 const sites = ["Lulu Mall, Kochi", "Aster Medcity", "TCS Technopark", "Lake Palace Resort"];
@@ -320,6 +320,10 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
   const [graceMins, setGraceMins] = useState(siteRecord.graceMins);
   const [dayInterval, setDayInterval] = useState(siteRecord.dayCheckIntervalMins);
   const [nightInterval, setNightInterval] = useState(siteRecord.nightCheckIntervalMins);
+  const [patrol, setPatrol] = useState(siteRecord.patrol);
+  const editPatrol = (shift: "day" | "night", patch: Partial<PatrolPlan>) => setPatrol(current => ({ ...current, [shift]: { ...current[shift], ...patch } }));
+  // Shifts are 12 hours; flag a plan whose rounds can't all start within one shift.
+  const patrolOverrun = (["day", "night"] as const).filter(shift => (patrol[shift].rounds - 1) * patrol[shift].intervalMins >= 12 * 60);
   const [contacts, setContacts] = useState<EscalationContact[]>(isNew ? [] : siteRecord.escalationContacts);
   const [officers, setOfficers] = useState<string[]>(isNew ? [] : siteRecord.fieldOfficers);
   const [docs, setDocs] = useState<SiteDocument[]>(siteDocuments.filter(doc => doc.site === selectedSite));
@@ -422,6 +426,13 @@ export function SiteConfigurationScreen({ onBack, role, siteName, initialTab }: 
             <Field label="Day presence-check interval"><InputAffix suffix="minutes" type="number" min={15} value={dayInterval} onChange={event => setDayInterval(Number(event.target.value))} /></Field>
             <Field label="Night presence-check interval"><InputAffix suffix="minutes" type="number" min={15} value={nightInterval} onChange={event => setNightInterval(Number(event.target.value))} /></Field>
           </FormGrid>
+          <FormGrid>
+            <Field label="Day patrol rounds" hint="Rounds the guard walks each day shift."><InputAffix suffix="rounds" type="number" min={0} value={patrol.day.rounds} onChange={event => editPatrol("day", { rounds: Number(event.target.value) })} /></Field>
+            <Field label="Day patrol interval" hint="Time between the start of each round."><InputAffix suffix="minutes" type="number" min={15} value={patrol.day.intervalMins} onChange={event => editPatrol("day", { intervalMins: Number(event.target.value) })} /></Field>
+            <Field label="Night patrol rounds" hint="Rounds the guard walks each night shift."><InputAffix suffix="rounds" type="number" min={0} value={patrol.night.rounds} onChange={event => editPatrol("night", { rounds: Number(event.target.value) })} /></Field>
+            <Field label="Night patrol interval" hint="Time between the start of each round."><InputAffix suffix="minutes" type="number" min={15} value={patrol.night.intervalMins} onChange={event => editPatrol("night", { intervalMins: Number(event.target.value) })} /></Field>
+          </FormGrid>
+          {patrolOverrun.length > 0 && <InlineAlert tone="warning">{patrolOverrun.map(shift => shift === "day" ? "Day" : "Night").join(" and ")} patrol rounds don&apos;t fit in a 12-hour shift. Reduce the rounds or the interval.</InlineAlert>}
           <ToggleRow title="Allow shared devices" description="Every punch still requires employee identity" />
           <ToggleRow title="Flag mock-location signals" description="Send suspicious punches to HR for review" defaultChecked />
         </FormStack>

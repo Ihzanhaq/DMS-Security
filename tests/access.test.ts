@@ -70,6 +70,12 @@ describe("view access", () => {
     expect(canEditView(effectivePermissions(role({ permissions: ["payroll.view", "payroll.approve"] })), "payroll")).toBe(true);
     expect(canModule(permissions, "workforce", "edit")).toBe(true);
   });
+  it("never marks view-only modules like the dashboard as read-only", () => {
+    const dashboard = effectivePermissions(role({ permissions: ["dashboard.view"] }));
+    expect(canEditView(dashboard, "dashboard")).toBe(true);
+    expect(canEditView(dashboard, "action-centre")).toBe(true);
+    expect(canEditView(effectivePermissions(role({ permissions: [] })), "dashboard")).toBe(false);
+  });
   it("blocks screens without the view key", () => {
     expect(canOpenView(permissions, "tickets")).toBe(false);
     expect(canOpenView(effectivePermissions(role({ permissions: ["tickets.edit"] })), "tickets")).toBe(false);

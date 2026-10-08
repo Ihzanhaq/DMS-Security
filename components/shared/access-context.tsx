@@ -45,6 +45,19 @@ const AccessContext = createContext<AccessValue | null>(null);
 
 type Stored = { roles: AccessRole[]; users: AccessUser[]; invitations: AccessInvitation[] };
 
+/** Signed-in user id; localStorage when "Remember me" is ticked, else this tab only. */
+const SESSION_KEY = "bmg-session";
+
+export function readSession() {
+  return window.localStorage.getItem(SESSION_KEY) ?? window.sessionStorage.getItem(SESSION_KEY);
+}
+
+export function writeSession(userId: string | null, remember = true) {
+  window.localStorage.removeItem(SESSION_KEY);
+  window.sessionStorage.removeItem(SESSION_KEY);
+  if (userId) (remember ? window.localStorage : window.sessionStorage).setItem(SESSION_KEY, userId);
+}
+
 function persist(state: Stored) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
@@ -80,7 +93,7 @@ export function AccessProvider({ children }: { children: React.ReactNode }) {
         const stored = loadStored();
         if (stored) { setRoles(stored.roles); setUsers(stored.users); setInvitations(stored.invitations); }
       } catch { /* corrupt storage falls back to seed data */ }
-      const requested = new URLSearchParams(window.location.search).get("user");
+      const requested = new URLSearchParams(window.location.search).get("user") ?? readSession();
       if (requested) setCurrentUserId(requested);
     });
     return () => window.clearTimeout(timer);

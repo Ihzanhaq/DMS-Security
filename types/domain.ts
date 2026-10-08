@@ -154,6 +154,8 @@ export type StatutorySettings = {
   esiWageCeiling: number;
 };
 
+export type PatrolPlan = { rounds: number; intervalMins: number };
+
 export type Site = {
   client: string;
   name: string;
@@ -173,6 +175,8 @@ export type Site = {
   /** Presence-check interval in minutes for each shift. */
   dayCheckIntervalMins: number;
   nightCheckIntervalMins: number;
+  /** Patrol rounds the guard must walk each shift, and minutes between rounds. */
+  patrol: { day: PatrolPlan; night: PatrolPlan };
   escalationContacts: EscalationContact[];
   /** Ordered FO assignment — index 0 is FO 1, etc. */
   fieldOfficers: string[];

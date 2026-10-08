@@ -23,6 +23,25 @@ npm run build
 
 ## 2. How to review the product
 
+### Demo sign-in
+
+The app opens on the sign-in page. Sign in with an email, phone or employee ID; every demo account uses the password **`Bmg@2026`**. Google and Microsoft buttons show a notice until the live backend exists. Sign out from the account menu (top right).
+
+| Role | Name | Sign in with |
+| --- | --- | --- |
+| Owner | Arun Kumar | `arun@bmgsecurity.in` |
+| Branch Manager | Vishnu Prasad | `vishnu@bmgsecurity.in` |
+| Operations In-charge | Nithin Joseph | `nithin@bmgsecurity.in` |
+| Finance | Divya Menon | `divya@bmgsecurity.in` |
+| Finance Assistant | Arjun R | `arjun@bmgsecurity.in` |
+| HR (customised: HR admin) | Meera Nair | `meera@bmgsecurity.in` |
+| HR Assistant | Anu Thomas | `anu@bmgsecurity.in` |
+| HR Executive | Rahul Dev | `rahul@bmgsecurity.in` |
+| Field Officer | Ajmal Khan | `ajmal@bmgsecurity.in` |
+| Field Officer (Tickets override) | Praveen S | `praveen@bmgsecurity.in` |
+| Guard | Suresh Babu | `BMG-1840` or `9847012840` |
+| Client | Lulu Group | `security@lulugroup.in` |
+
 Use the role selector underneath the BMG Security logo. Each role has a separate navigation and landing screen:
 
 - **Owner** — complete organization view and every management module.

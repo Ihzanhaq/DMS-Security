@@ -215,11 +215,13 @@ export function SiteDetailScreen({
           { label: "Benefit scheme", value: site.scheme },
         ]} />
       </Panel>
-      <Panel title="Attendance rules">
+      <Panel title="Attendance rules" action={<Button variant="outline" size="sm" onClick={onEditBoundary}><Settings />Edit rules</Button>}>
         <DefRows rows={[
           { label: "Late-arrival grace", value: `${site.graceMins} min` },
           { label: "Day presence check", value: `Every ${site.dayCheckIntervalMins} min` },
           { label: "Night presence check", value: `Every ${site.nightCheckIntervalMins} min` },
+          { label: "Day patrol", value: `${site.patrol.day.rounds} rounds · every ${site.patrol.day.intervalMins} min` },
+          { label: "Night patrol", value: `${site.patrol.night.rounds} rounds · every ${site.patrol.night.intervalMins} min` },
           { label: "Centre", value: `${site.lat.toFixed(5)}, ${site.lng.toFixed(5)}`, mono: true },
           { label: "Boundary", value: site.polygon ? `${site.polygon.length}-corner polygon` : `${site.radius} m radius` },
         ]} />

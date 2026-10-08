@@ -42,6 +42,7 @@ export const sites: Site[] = [
       { lat:10.02615, lng:76.30915 }, { lat:10.02610, lng:76.30695 },
     ],
     graceMins:30, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    patrol:{ day:{ rounds:3, intervalMins:180 }, night:{ rounds:6, intervalMins:120 } },
     escalationContacts:[
       { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
       { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
@@ -52,6 +53,7 @@ export const sites: Site[] = [
   {
     client:"Tata Consultancy Services", name:"TCS Technopark", district:"Thiruvananthapuram", posts:24, staffed:22, coverage:92, scheme:"PF + ESI", lat:8.55700, lng:76.87900, radius:100,
     graceMins:60, dayCheckIntervalMins:60, nightCheckIntervalMins:45,
+    patrol:{ day:{ rounds:3, intervalMins:180 }, night:{ rounds:8, intervalMins:90 } },
     escalationContacts:[
       { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
       { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
@@ -62,6 +64,7 @@ export const sites: Site[] = [
   {
     client:"Aster DM Healthcare", name:"Aster Medcity", district:"Ernakulam", posts:16, staffed:15, coverage:94, scheme:"ESI", lat:10.04500, lng:76.27600, radius:85,
     graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    patrol:{ day:{ rounds:3, intervalMins:180 }, night:{ rounds:6, intervalMins:120 } },
     escalationContacts:[
       { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
       { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
@@ -72,6 +75,7 @@ export const sites: Site[] = [
   {
     client:"Lake Palace", name:"Lake Palace Resort", district:"Alappuzha", posts:8, staffed:7, coverage:88, scheme:"Salary only", lat:9.49800, lng:76.33900, radius:75,
     graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    patrol:{ day:{ rounds:3, intervalMins:180 }, night:{ rounds:6, intervalMins:120 } },
     escalationContacts:[
       { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
       { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
@@ -82,6 +86,7 @@ export const sites: Site[] = [
   {
     client:"Caritas Hospital", name:"Caritas Hospital", district:"Kottayam", posts:12, staffed:10, coverage:83, scheme:"PF + ESI", lat:9.61800, lng:76.53200, radius:100,
     graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    patrol:{ day:{ rounds:3, intervalMins:180 }, night:{ rounds:6, intervalMins:120 } },
     escalationContacts:[
       { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
       { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
@@ -92,6 +97,7 @@ export const sites: Site[] = [
   {
     client:"Malabar Gold & Diamonds", name:"Malabar Gold, Kozhikode", district:"Kozhikode", posts:10, staffed:10, coverage:100, scheme:"PF + ESI", lat:11.24880, lng:75.78040, radius:60,
     graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    patrol:{ day:{ rounds:3, intervalMins:180 }, night:{ rounds:6, intervalMins:120 } },
     escalationContacts:[
       { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
       { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
@@ -102,6 +108,7 @@ export const sites: Site[] = [
   {
     client:"Sobha Developers", name:"Sobha City Mall", district:"Thrissur", posts:14, staffed:13, coverage:93, scheme:"ESI", lat:10.52760, lng:76.21440, radius:110,
     graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    patrol:{ day:{ rounds:3, intervalMins:180 }, night:{ rounds:6, intervalMins:120 } },
     escalationContacts:[
       { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
       { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },
@@ -112,6 +119,7 @@ export const sites: Site[] = [
   {
     client:"Skyline Builders", name:"Skyline Apartments", district:"Kannur", posts:6, staffed:5, coverage:83, scheme:"Salary only", lat:11.87450, lng:75.37040, radius:70,
     graceMins:15, dayCheckIntervalMins:60, nightCheckIntervalMins:60,
+    patrol:{ day:{ rounds:3, intervalMins:180 }, night:{ rounds:6, intervalMins:120 } },
     escalationContacts:[
       { label:"Site supervisor", name:"Niyas P", phone:"97455 12034" },
       { label:"District operations", name:"Nithin Joseph", phone:"94002 11870" },

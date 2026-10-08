@@ -3,7 +3,7 @@
 import { Bell, Moon, Shield, Sun } from "lucide-react";
 import { APP_NAME } from "@/lib/labels";
 import { SearchTrigger } from "./global-search";
-import { UserMenu } from "./user-menu";
+import { UserMenu, type MenuUser } from "./user-menu";
 import type { AppNotification } from "@/types/domain";
 import { cn } from "@/lib/utils";
 
@@ -18,7 +18,6 @@ export function TopBar({
   users,
   roles,
   currentUserId,
-  onViewAs,
   onSignOut,
   showSearch,
 }: {
@@ -30,10 +29,9 @@ export function TopBar({
   notificationsOpen: boolean;
   onToggleNotifications: () => void;
   onNotificationClick: (item: AppNotification) => void;
-  users: { id: string; name: string; roleId: string; status: string }[];
+  users: MenuUser[];
   roles: { id: string; name: string }[];
   currentUserId: string;
-  onViewAs: (userId: string) => void;
   onSignOut: () => void;
 }) {
   return (
@@ -86,7 +84,6 @@ export function TopBar({
           users={users}
           roles={roles}
           currentUserId={currentUserId}
-          onViewAs={onViewAs}
           onSignOut={onSignOut}
         />
       </div>
