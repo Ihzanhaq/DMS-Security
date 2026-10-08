@@ -5,9 +5,11 @@ import {
   AlertTriangle, CalendarDays, CheckCircle2, ChevronRight, Crosshair, Download, FileText, LogOut,
   MapPin, MessageSquare, Navigation, Phone, Receipt, ShieldCheck, UserRound, Users, Wallet,
 } from "lucide-react";
-import type { AppView, DutyChangeReason, DutyChangeRequest, DutyChangeType, GeoState, Ticket, TicketCategory, UniformRequest } from "@/types/domain";
-import { complaintTrail, complaints, distanceMetres, employees, payslips, rupees, sites, sopDocuments, tickets as ticketSeed, uniformKit, uniformPlans, uniformRequests } from "@/lib/mock-data";
+import type { AppView, DutyChangeReason, DutyChangeRequest, DutyChangeType, GeoState, Ticket, TicketCategory, UniformRequestStatus } from "@/types/domain";
+import { complaintTrail, complaints, distanceMetres, employees, payslips, rupees, sites, sopDocuments, tickets as ticketSeed, uniformPlans } from "@/lib/mock-data";
 import { useOps } from "@/components/shared/ops-context";
+import { useInventory } from "@/components/shared/inventory-context";
+import { ONE_SIZE, sizesOf } from "@/lib/inventory";
 import { isInsideGeofence } from "@/lib/geofence";
 import { computeAdvanceEligibility } from "@/lib/advance-calculator";
 import { usePayroll } from "@/components/shared/payroll-context";
@@ -110,24 +112,27 @@ function GuardHelp() {
 
 /* --------------------------------- Uniform -------------------------------- */
 
-const sizeOptions = (item: string) => item.startsWith("Shirt") || item === "Sweater" || item === "Raincoat" ? ["S", "M", "L", "XL", "XXL"]
-  : item === "Trousers" ? ["30", "32", "34", "36", "38"]
-    : item.startsWith("Shoes") ? ["6", "7", "8", "9", "10", "11"]
-      : ["Standard"];
-const itemPrice = (item: string) => item.startsWith("Shoes") ? 900 : item === "Trousers" ? 550 : item.startsWith("Shirt") ? 450 : item === "Raincoat" || item === "Sweater" ? 600 : 300;
+const GUARD_ID = "BMG-1840";
+const guardSteps: UniformRequestStatus[] = ["requested", "approved", "dispatched", "delivered"];
 
 function GuardUniform() {
   const notify = useToast();
-  const sizes = useOnboarding().getProfile("BMG-1840").uniformSizes;
-  const [item, setItem] = useState(uniformKit[0].item);
-  const [size, setSize] = useState(sizeOptions(uniformKit[0].item)[2] ?? sizeOptions(uniformKit[0].item)[0]);
+  const sizes = useOnboarding().getProfile(GUARD_ID).uniformSizes;
+  const { items, requests, addRequest } = useInventory();
+  const kit = items.filter(entry => entry.active && entry.category === "uniform");
+  const [itemId, setItemId] = useState(kit[0]?.id ?? "");
+  const item = kit.find(entry => entry.id === itemId) ?? kit[0];
+  const [size, setSize] = useState(item ? sizesOf(item)[Math.min(2, sizesOf(item).length - 1)] : ONE_SIZE);
   const [qty, setQty] = useState(1);
   const [plan, setPlan] = useState(uniformPlans[2].name);
-  const [mine, setMine] = useState<UniformRequest[]>(uniformRequests.filter(request => request.employeeId === "BMG-1840"));
-  const statusSteps: ["requested", "approved", "dispatched", "delivered"] = ["requested", "approved", "dispatched", "delivered"];
+  const [note, setNote] = useState("");
+  const mine = requests.filter(request => request.employeeId === GUARD_ID);
+  const itemName = (id: string) => items.find(entry => entry.id === id)?.name ?? id;
   function submit() {
-    const request: UniformRequest = { id: `UR-${Date.now()}`, employeeId: "BMG-1840", items: [{ item, size, qty }], status: "requested", requestedOn: APP_TODAY, amount: itemPrice(item) * qty, recoveryPlan: plan };
-    setMine(current => [request, ...current]);
+    if (!item) return;
+    // Guards at Kochi sites are served by the Kochi branch store.
+    addRequest({ employeeId: GUARD_ID, items: [{ itemId: item.id, size, qty }], requestedOn: APP_TODAY, amount: item.unitCost * qty, recoveryPlan: plan, storeId: "kochi", note: note.trim() || undefined }, "Guard app");
+    setNote("");
     notify("Uniform request sent to the store");
   }
   return <>
@@ -142,16 +147,17 @@ function GuardUniform() {
           </div>
         </Panel>
         <Panel title="Request an item">
-          <FormStack>
+          {item ? <FormStack>
             <FormGrid>
-              <Field label="Item"><Select value={item} onChange={event => { setItem(event.target.value); setSize(sizeOptions(event.target.value)[0]); }}>{uniformKit.map(kitItem => <option key={kitItem.item}>{kitItem.item}</option>)}</Select></Field>
-              <Field label="Size"><Select value={size} onChange={event => setSize(event.target.value)}>{sizeOptions(item).map(option => <option key={option}>{option}</option>)}</Select></Field>
+              <Field label="Item"><Select value={item.id} onChange={event => { const next = kit.find(entry => entry.id === event.target.value); setItemId(event.target.value); if (next) setSize(sizesOf(next)[0]); }}>{kit.map(entry => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</Select></Field>
+              <Field label="Size"><Select value={size} disabled={!item.sizes.length} onChange={event => setSize(event.target.value)}>{sizesOf(item).map(option => <option key={option} value={option}>{option === ONE_SIZE ? "One size" : option}</option>)}</Select></Field>
               <Field label="Quantity"><Input type="number" min={1} max={4} value={qty} onChange={event => setQty(Math.max(1, Math.min(4, Number(event.target.value))))} /></Field>
               <Field label="Pay by"><Select value={plan} onChange={event => setPlan(event.target.value)}>{uniformPlans.map(option => <option key={option.name}>{option.name}</option>)}</Select></Field>
             </FormGrid>
-            <InlineAlert>Estimated cost <strong>{rupees(itemPrice(item) * qty)}</strong>, recovered as: {plan}.</InlineAlert>
+            <Field label="Note for the store"><Input value={note} onChange={event => setNote(event.target.value)} placeholder="e.g. Torn at the shoulder" /></Field>
+            <InlineAlert>Estimated cost <strong>{rupees(item.unitCost * qty)}</strong>, recovered as: {plan}.</InlineAlert>
             <Button onClick={submit}><CheckCircle2 />Send request</Button>
-          </FormStack>
+          </FormStack> : <EmptyState icon={FileText} message="No uniform items are available to request." />}
         </Panel>
       </div>
       <Panel title="My requests" description="Status updates appear as the store processes them.">
@@ -160,14 +166,17 @@ function GuardUniform() {
           {mine.map(request => (
             <div key={request.id} className="rounded-xl border border-border p-4">
               <div className="mb-3 flex items-start justify-between gap-2">
-                <strong className="text-sm">{request.items.map(line => `${line.item.split(" (")[0]} · ${line.size} ×${line.qty}`).join(", ")}</strong>
+                <strong className="text-sm">{request.items.map(line => `${itemName(line.itemId).split(" (")[0]}${line.size !== ONE_SIZE ? ` · ${line.size}` : ""} ×${line.qty}`).join(", ")}</strong>
                 <StatusChip tone={requestTone(request.status)}>{titleCase(request.status)}</StatusChip>
               </div>
-              <Timeline entries={statusSteps.map((step, index) => {
-                const reached = statusSteps.indexOf(request.status) >= index;
-                const active = request.status === step && step !== "delivered";
-                return { title: titleCase(step), time: reached ? (index === 0 ? formatAppDate(request.requestedOn) : "Updated") : "Pending", note: step === "dispatched" && reached ? `${rupees(request.amount)} to be recovered (${request.recoveryPlan})` : undefined, state: active ? "active" as const : reached ? "done" as const : undefined };
-              })} />
+              {request.status === "rejected"
+                ? <InlineAlert tone="danger">Rejected{request.rejectReason ? `: ${request.rejectReason}` : ""}</InlineAlert>
+                : <Timeline entries={guardSteps.map((step, index) => {
+                  const reached = guardSteps.indexOf(request.status) >= index;
+                  const active = request.status === step && step !== "delivered";
+                  const on = request.history.find(entry => entry.status === step)?.on;
+                  return { title: titleCase(step), time: reached && on ? formatAppDate(on) : reached ? "Updated" : "Pending", note: step === "dispatched" && reached ? `${rupees(request.amount)} to be recovered (${request.recoveryPlan})` : undefined, state: active ? "active" as const : reached ? "done" as const : undefined };
+                })} />}
             </div>
           ))}
         </div>

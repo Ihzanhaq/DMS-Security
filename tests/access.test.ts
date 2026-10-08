@@ -139,3 +139,13 @@ describe("seed data", () => {
     }
   });
 });
+
+describe("legacy uniforms permission", () => {
+  it("maps stored uniforms keys onto inventory and uniform requests", () => {
+    expect(normalizeKeys(["uniforms.view", "uniforms.edit"])).toEqual(expect.arrayContaining(["inventory.view", "inventory.edit", "uniform-requests.view", "uniform-requests.approve"]));
+    expect(normalizeKeys(["uniforms.view"])).not.toContain("uniform-requests.approve");
+  });
+  it("maps a v1 uniforms level onto both modules", () => {
+    expect(keysFromLevels({ uniforms: "view" })).toEqual(["inventory.view", "uniform-requests.view"]);
+  });
+});

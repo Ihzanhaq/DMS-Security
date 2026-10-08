@@ -8,7 +8,9 @@ import { WorkforceScreen } from "@/features/workforce/workforce-screen";
 import { AttendanceScreen, DutyChangesScreen, InspectionsScreen, SiteDetailScreen, SitesScreen } from "@/features/operations/operations-screens";
 import { DeploymentScreen } from "@/features/operations/deployment-screen";
 import { SiteAttendanceScreen } from "@/features/operations/site-attendance-calendar";
-import { AdvancesScreen, PayrollScreen, SparePaymentsScreen, UniformsScreen } from "@/features/payroll/payroll-screens";
+import { AdvancesScreen, PayrollScreen, SparePaymentsScreen } from "@/features/payroll/payroll-screens";
+import { InventoryScreen } from "@/features/inventory/inventory-screen";
+import { UniformRequestsScreen } from "@/features/inventory/uniform-requests-screen";
 import { ComplaintsScreen, ImportsScreen, ReportsScreen, SettingsScreen } from "@/features/compliance/compliance-screens";
 import { TicketsScreen } from "@/features/compliance/tickets-screen";
 import { AnalyticsScreen } from "@/features/reports/analytics-screens";
@@ -23,6 +25,8 @@ import { MemberAccessScreen } from "@/features/access/member-access-screen";
 import { AccessProvider, useAccess } from "@/components/shared/access-context";
 import { OnboardingProvider, useOnboarding } from "@/components/shared/onboarding-context";
 import { OpsProvider, useOps } from "@/components/shared/ops-context";
+import { InventoryProvider } from "@/components/shared/inventory-context";
+import { SiteCalendarProvider } from "@/components/shared/site-calendar-context";
 import { NAVIGATE_EVENT, showDesktopAlert } from "@/lib/browser-notify";
 import { statutoryNeeds, statutoryStatus } from "@/lib/pf-esi";
 import { usePayroll } from "@/components/shared/payroll-context";
@@ -53,7 +57,11 @@ export function HrmsApp() {
         <AccessProvider>
           <OnboardingProvider>
             <OpsProvider>
-              <HrmsShell />
+              <InventoryProvider>
+                <SiteCalendarProvider>
+                  <HrmsShell />
+                </SiteCalendarProvider>
+              </InventoryProvider>
             </OpsProvider>
           </OnboardingProvider>
         </AccessProvider>
@@ -85,6 +93,8 @@ function HrmsShell() {
   const [siteInitialTab, setSiteInitialTab] = useState<"profile" | "salary" | "boundary" | "documents">("profile");
   const [importKind, setImportKind] = useState<string | undefined>();
   const [ticketCreate, setTicketCreate] = useState(false);
+  /** Drawer the inventory page opens with, e.g. "issue" or "transfer:shirt|M|kochi". */
+  const [inventoryIntent, setInventoryIntent] = useState<string | undefined>();
   const [activeReport, setActiveReport] = useState<ReportName>(DEFAULT_REPORT_NAME);
   const [activeSettingsGroup, setActiveSettingsGroup] = useState<SettingsGroup>(DEFAULT_SETTINGS_GROUP);
   const [guestGuard, setGuestGuard] = useState<GuardUser | null>(null);
@@ -221,7 +231,8 @@ function HrmsShell() {
 
   const navigate = (nextView: string, meta?: string | NavClickMeta) => {
     const options = parseNavMeta(meta);
-    const viewKey = nextView === "sops" ? "sites" : nextView;
+    const viewKey = nextView === "sops" ? "sites" : nextView === "uniforms" || nextView === "uniform-issue" ? "inventory" : nextView;
+    setInventoryIntent(nextView === "uniform-issue" ? "issue" : viewKey === "inventory" ? options?.tab : undefined);
     if (options?.site) setSelectedSite(options.site);
     if (viewKey === "access") setAccessTab(isAccessTab(options?.tab) ? options.tab : "members");
     if (options?.roleId) setSelectedRoleId(options.roleId);
@@ -398,7 +409,7 @@ function HrmsShell() {
             {urlReady && renderView(view, {
               role: currentRole, navigate, canOpen, onboardingReady: onboarding.ready,
               editingEmployeeId, openEmployeeForm, allocationEmployeeId, openAllocationAudit,
-              selectedSite, openSiteConfig, openSiteDetail, siteInitialTab, importKind, openImports, ticketCreate,
+              selectedSite, openSiteConfig, openSiteDetail, siteInitialTab, importKind, openImports, ticketCreate, inventoryIntent,
               accessTab, selectedRoleId, selectedMemberId,
               activeReport,
               activeSettingsGroup,
@@ -457,6 +468,7 @@ type ViewContext = {
   importKind: string | undefined;
   openImports: (kind: string) => void;
   ticketCreate: boolean;
+  inventoryIntent: string | undefined;
   accessTab: AccessTab;
   selectedRoleId: string | null;
   selectedMemberId: string | null;
@@ -470,7 +482,7 @@ type ViewContext = {
 function renderView(view: AppView, ctx: ViewContext) {
   const {
     role, navigate, canOpen, onboardingReady, editingEmployeeId, openEmployeeForm, allocationEmployeeId,
-    openAllocationAudit, selectedSite, openSiteConfig, openSiteDetail, siteInitialTab, importKind, openImports, ticketCreate, activeReport,
+    openAllocationAudit, selectedSite, openSiteConfig, openSiteDetail, siteInitialTab, importKind, openImports, ticketCreate, inventoryIntent, activeReport,
     activeSettingsGroup,
   } = ctx;
   if (view === "guard-vigilance") return <NightVigilanceScreen guardMode onBack={() => navigate("guard-home")} />;
@@ -516,7 +528,9 @@ function renderView(view: AppView, ctx: ViewContext) {
     case "attendance": return <AttendanceScreen onNavigate={navigate} onCorrect={() => navigate("attendance-correction")} />;
     case "payroll": return <PayrollScreen onNavigate={navigate} onAllocation={openAllocationAudit} />;
     case "advances": return <AdvancesScreen onNavigate={navigate} onCreate={() => navigate("advance-form")} />;
-    case "uniforms": return <UniformsScreen onNavigate={navigate} onIssue={() => navigate("uniform-issue")} onImport={() => openImports("Opening balances")} />;
+    case "uniforms":
+    case "inventory": return <InventoryScreen key={inventoryIntent ?? "inventory"} intent={inventoryIntent} onImport={() => openImports("Opening balances")} />;
+    case "uniform-requests": return <UniformRequestsScreen onNavigate={navigate} />;
     case "inspections": return <InspectionsScreen onNavigate={navigate} onLog={() => navigate("inspection-form")} />;
     case "complaints": return <ComplaintsScreen onNavigate={navigate} onCreate={() => navigate("complaint-form")} />;
     case "reports": return <ReportsScreen key={ctx.activeReport} report={ctx.activeReport} />;
@@ -549,7 +563,7 @@ function renderView(view: AppView, ctx: ViewContext) {
     case "action-centre": return <ActionCentreScreen onOpen={navigate} />;
     case "assignment-form": return <DetailedWorkflowScreen kind="assignment" onBack={() => navigate("deployment")} />;
     case "attendance-correction": return <DetailedWorkflowScreen kind="attendance" onBack={() => navigate("attendance")} />;
-    case "uniform-issue": return <DetailedWorkflowScreen kind="uniform" onBack={() => navigate("uniforms")} />;
+    case "uniform-issue": return <InventoryScreen key="issue" intent="issue" onImport={() => openImports("Opening balances")} />;
     case "inspection-form": return <DetailedWorkflowScreen kind="inspection" onBack={() => navigate("inspections")} />;
     case "complaint-form": return <DetailedWorkflowScreen kind="complaint" onBack={() => navigate(role.kind === "client" ? "client-complaints" : "complaints")} />;
     case "sop-form": return (

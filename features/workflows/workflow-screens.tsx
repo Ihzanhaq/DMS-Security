@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import {
   AlertTriangle, Building2, CalendarCheck, Check, CheckCircle2, ClipboardList, Clock,
-  Crosshair, FileText, HandCoins, Package, Plus, Save, ShieldCheck, Trash2, Users, Wallet,
+  Crosshair, FileText, HandCoins, Plus, Save, ShieldCheck, Trash2, Users, Wallet,
 } from "lucide-react";
 import {
   BackCrumb, Button, DefRows, DetailDrawer, Field, FormGrid, FormStack, IconTile, InlineAlert,
@@ -30,7 +30,6 @@ import type { AppView, BenefitOverride, BenefitScheme, EmployeeDocument, Employe
 
 const districts = keralaDistricts;
 const sites = ["Lulu Mall, Kochi", "Aster Medcity", "TCS Technopark", "Lake Palace Resort"];
-const kitItems = ["Shirt", "Trousers", "Shoes", "Belt", "Cap", "Tie", "Socks", "Raincoat", "Whistle", "Lanyard", "ID holder", "Notebook"];
 /** Phone on file for an employee id, when the id resolves. */
 const phoneOf = (employeeId: string) => employeeRecords.find(item => item.id === employeeId)?.phone;
 const dutyUnits = ["0.25", "0.50", "0.75", "1.00", "1.50"];
@@ -964,12 +963,11 @@ export function ActionCentreScreen({ onOpen }: { onOpen: (view: string) => void 
 
 /* ---------------------------- Detailed workflows --------------------------- */
 
-export type WorkflowKind = "assignment" | "attendance" | "uniform" | "inspection" | "complaint" | "sop" | "advance";
+export type WorkflowKind = "assignment" | "attendance" | "inspection" | "complaint" | "sop" | "advance";
 
 const workflowConfig: Record<WorkflowKind, { title: string; description: string; submit: string; done: string; back: string; icon: typeof Users }> = {
   assignment: { title: "Assign employee to a post", description: "Create a dated post assignment. Pay rules are resolved automatically.", submit: "Save assignment", done: "Assignment saved", back: NAV.deployment, icon: Users },
   attendance: { title: "Attendance correction", description: "Add a missing or disputed punch. HR approves it and the original punch is kept.", submit: "Submit for approval", done: "Correction sent to HR for approval", back: NAV.attendance, icon: CalendarCheck },
-  uniform: { title: "Issue uniform kit", description: "Record the items handed over and the recovery plan.", submit: "Issue kit", done: "Uniform kit issued", back: NAV.uniforms, icon: Package },
   inspection: { title: "Log site inspection", description: `Record a ${ROLE_TERMS.fieldOfficer} visit, checklist result and follow-up owner.`, submit: "Save inspection", done: "Inspection saved", back: NAV.inspections, icon: ClipboardList },
   complaint: { title: "Log client complaint", description: "Capture the issue, severity, SLA and investigation owner.", submit: "Create complaint", done: "Complaint logged", back: NAV.complaints, icon: AlertTriangle },
   sop: { title: "Create site SOP", description: "Write versioned post instructions that guards must acknowledge.", submit: "Publish to guards", done: "SOP published to guards", back: NAV.sops, icon: FileText },
@@ -987,7 +985,6 @@ export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; o
   const [assignmentSite, setAssignmentSite] = useState(sites[0]);
   const [assignmentPost, setAssignmentPost] = useState("Main gate");
   const [assignmentDate, setAssignmentDate] = useState(APP_TODAY);
-  const [kit, setKit] = useState(new Set(kitItems));
   const [advanceAmount, setAdvanceAmount] = useState(2000);
   const [advanceReason, setAdvanceReason] = useState("");
   const effectiveEmployeeRule = employeeRules.filter(item => item.employeeId === employeeId && item.effectiveFrom <= assignmentDate).sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))[0];
@@ -1001,12 +998,7 @@ export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; o
   const breakdown = getBreakdown(employeeId);
   const eligibility = computeAdvanceEligibility({ grossEarned: breakdown.gross, deductionsToDate: breakdown.pf + breakdown.esi + breakdown.otherDeductions, alreadyRequested: 0 });
   const overLimit = kind === "advance" && advanceAmount > eligibility.maxAdvance;
-  const toggleKit = (item: string) => setKit(current => {
-    const next = new Set(current);
-    if (next.has(item)) next.delete(item); else next.add(item);
-    return next;
-  });
-  const submitDisabled = (kind === "advance" && (overLimit || advanceAmount <= 0 || !advanceReason.trim())) || (kind === "uniform" && kit.size === 0);
+  const submitDisabled = kind === "advance" && (overLimit || advanceAmount <= 0 || !advanceReason.trim());
 
   const submit = async () => {
     if (kind === "sop" && !await confirm({ title: "Publish this SOP to guards?", description: "Every guard on the selected post gets an acknowledgement task. The previous version stays in history.", confirmLabel: "Publish" })) return;
@@ -1032,7 +1024,7 @@ export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; o
           {(kind === "assignment" || kind === "attendance") && <Field label="Post" required>
             <Select value={assignmentPost} onChange={event => setAssignmentPost(event.target.value)}><option>Main gate</option><option>Loading bay</option><option>Control room</option><option>Emergency</option></Select>
           </Field>}
-          {kind !== "uniform" && kind !== "advance" && <Field label={kind === "sop" ? "Effective from" : kind === "assignment" ? "Start date" : "Date"} required>
+          {kind !== "advance" && <Field label={kind === "sop" ? "Effective from" : kind === "assignment" ? "Start date" : "Date"} required>
             <Input type="date" value={assignmentDate} onChange={event => setAssignmentDate(event.target.value)} />
           </Field>}
           {kind === "assignment" && <>
@@ -1043,10 +1035,6 @@ export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; o
             <Field label="Punch-in time" required><Input type="time" defaultValue="08:03" /></Field>
             <Field label="Duty value"><Select value={duty} onChange={event => setDuty(event.target.value)}>{dutyUnits.map(unit => <option key={unit}>{unit}</option>)}</Select></Field>
             <Field label="Reason for correction" required><Select><option>Device or network failure</option><option>Supervisor verified presence</option><option>Incorrect shift mapping</option></Select></Field>
-          </>}
-          {kind === "uniform" && <>
-            <Field label="Recovery plan"><Select><option>Full upfront · ₹1,960</option><option>₹1,000 upfront + ₹1,200 from salary</option><option>Full salary deduction · ₹2,600</option></Select></Field>
-            <Field label="Issue date"><Input type="date" defaultValue={APP_TODAY} /></Field>
           </>}
           {kind === "inspection" && <>
             <Field label="Visit time"><Input type="time" defaultValue="13:00" /></Field>
@@ -1070,17 +1058,6 @@ export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; o
             <Field label="Recover from"><Select><option>September 2026 payroll</option><option>Split over 2 months</option><option>Split over 3 months</option></Select></Field>
           </>}
         </FormGrid>
-        {kind === "uniform" && <Section title={`Kit items · ${kit.size} of ${kitItems.length}`} className="mt-5 mb-0">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            {kitItems.map(item => (
-              <button key={item} type="button" aria-pressed={kit.has(item)} onClick={() => toggleKit(item)}
-                className={cn("flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm", kit.has(item) ? "border-emerald bg-emerald/5" : "border-border hover:bg-surface")}>
-                <span className={cn("flex h-4 w-4 items-center justify-center rounded border", kit.has(item) ? "border-emerald bg-emerald text-white" : "border-border")}>{kit.has(item) && <Check className="h-3 w-3" />}</span>
-                {item}
-              </button>
-            ))}
-          </div>
-        </Section>}
         {(kind === "complaint" || kind === "sop" || kind === "inspection" || kind === "advance") && <div className="mt-4">
           <Field label={kind === "complaint" ? "What happened?" : kind === "sop" ? "Instructions for guards" : kind === "advance" ? "Reason" : "Inspection notes"} required={kind !== "inspection"}>
             {kind === "advance"
@@ -1107,12 +1084,6 @@ export function DetailedWorkflowScreen({ kind, onBack }: { kind: WorkflowKind; o
           <KeyValue label="Approval" value="HR required" />
           <KeyValue label="Original punch" value="Kept unchanged" />
           <p className="mt-3 text-sm text-muted">The correction is stored as a separate record once HR approves it.</p>
-        </>}
-        {kind === "uniform" && <>
-          <KeyValue label="Items selected" value={`${kit.size} / ${kitItems.length}`} />
-          <KeyValue label="Paid upfront" value="₹1,960" />
-          <KeyValue label="Recovered from salary" value="₹0" />
-          <p className="mt-3 text-sm text-muted">Any unpaid balance blocks exit clearance.</p>
         </>}
         {kind === "inspection" && <>
           <KeyValue label="GPS verification" value="Required" />

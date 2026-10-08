@@ -19,6 +19,8 @@ export const NAV = {
   sparePayments: "Spare payments",
   penalties: "Penalties and deductions",
   uniforms: "Uniforms",
+  inventory: "Inventory",
+  uniformRequests: "Uniform requests",
   inspections: "Field officer inspections",
   complaints: "Complaints",
   tickets: "Tickets",

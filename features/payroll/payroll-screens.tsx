@@ -2,16 +2,16 @@
 
 import { useMemo, useState } from "react";
 import {
-  AlertTriangle, ArrowRight, CalendarCheck, CheckCircle2, ChevronRight, Coins, Download, Package, Plus,
-  Receipt, Shirt, ShieldCheck, Upload, Wallet,
+  AlertTriangle, ArrowRight, CalendarCheck, CheckCircle2, ChevronRight, Coins, Download, Plus,
+  Receipt, ShieldCheck, Wallet,
 } from "lucide-react";
-import { employees, lateAndAbsent, rupees, spareDutyPayments, uniformBatches, uniformKit, uniformPlans, uniformRequests } from "@/lib/mock-data";
-import type { SpareDutyPayment, UniformRequest, UniformRequestStatus } from "@/types/domain";
+import { employees, lateAndAbsent, rupees, spareDutyPayments } from "@/lib/mock-data";
+import type { SpareDutyPayment } from "@/types/domain";
 import { computeAdvanceEligibility } from "@/lib/advance-calculator";
 import { payBasisLabel } from "@/lib/payroll-calculator";
 import {
-  Button, DataTable, DefRows, DetailDrawer, EmptyState, InlineAlert, KeyValue, ListRow, PageHeader, Panel,
-  PersonCell, ProgressBar, Section, Select, SplitLayout, StatStrip, StatusChip, Stepper, Timeline, useConfirm,
+  Button, DataTable, DefRows, DetailDrawer, EmptyState, InlineAlert, PageHeader, Panel,
+  PersonCell, ProgressBar, Section, SplitLayout, StatStrip, StatusChip, Stepper, Timeline, useConfirm,
   type Column, type StatusTone,
 } from "@/components/ui-kit";
 import { useToast } from "@/components/shared/toast-context";
@@ -390,119 +390,5 @@ export function SparePaymentsScreen({ onNavigate }: { onNavigate?: Navigate }) {
           { header: "Action", align: "right", cell: row => row.status === "queued" ? <Button size="sm" variant="outline" onClick={() => transfer(row)}>Mark transferred</Button> : <span className="text-xs text-muted">Done</span> },
         ]} />
     </Panel>
-  </>;
-}
-
-/* --------------------------------- Uniforms -------------------------------- */
-
-const uniformStatusLabel: Record<UniformRequestStatus, string> = { requested: "Requested", approved: "Approved", dispatched: "Dispatched", delivered: "Delivered" };
-
-export function UniformsScreen({ onIssue, onImport, onNavigate }: { onIssue: () => void; onImport: () => void; onNavigate?: Navigate }) {
-  const notify = useToast();
-  const [requestFilter, setRequestFilter] = useState<UniformRequestStatus | null>(null);
-  const [plan, setPlan] = useState<(typeof uniformPlans)[number] | null>(null);
-  const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [requests, setRequests] = useState<UniformRequest[]>(uniformRequests);
-  const updateStatus = (id: string, status: UniformRequestStatus) => {
-    const request = requests.find(item => item.id === id);
-    setRequests(current => current.map(item => item.id === id ? { ...item, status } : item));
-    notify(`Request ${uniformStatusLabel[status].toLowerCase()}${status === "dispatched" ? ` · ${rupees(request?.amount ?? 0)} queued for salary recovery` : ""}`);
-  };
-  const lowStock = uniformKit.filter(item => item.stock < item.reorder);
-  const exportStock = () => {
-    downloadCsv("uniform-stock", ["Item", "Per kit", "In stock", "Reorder level"], uniformKit.map(item => [item.item, item.issued, item.stock, item.reorder]));
-    notify("Stock report downloaded");
-  };
-
-  return <>
-    <PageHeader title={NAV.uniforms} subtitle="Kit stock by batch, guard requests, dispatch and salary recovery."
-      actions={<><Button variant="outline" onClick={onImport}><Upload />Import balances</Button><Button onClick={onIssue}><Plus />Issue kit</Button></>} />
-    <StatStrip items={[
-      { icon: Shirt, value: "76", label: "Kits issued", note: "This quarter", onClick: () => setInventoryOpen(true), actionLabel: "Open uniform kit stock" },
-      { icon: Package, value: String(new Set(uniformBatches.map(batch => batch.batchNo)).size), label: "Batches tracked", note: "Stock by size", tone: "green", onClick: () => setInventoryOpen(true), actionLabel: "Open kit stock by batch" },
-      { icon: Wallet, value: "₹1.82L", label: "Pending recovery", note: "93 employees", tone: "orange", onClick: () => onNavigate?.("reports", { report: "Uniform recovery" }), actionLabel: "Open the uniform recovery report" },
-      { icon: AlertTriangle, value: String(requests.filter(item => item.status === "requested").length), label: "New requests", note: "From the guard app", tone: "red", onClick: () => setRequestFilter(current => current ? null : "requested"), active: requestFilter === "requested", actionLabel: "Show new requests from guards" },
-    ]} />
-    <SplitLayout>
-      <Panel title="Recovery plans" description="The default can be overridden per employee.">
-        {uniformPlans.map(item => (
-          <ListRow key={item.name} onClick={() => setPlan(item)}>
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald/10 text-emerald"><Shirt className="h-4 w-4" /></span>
-            <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{item.name}</strong><small className="text-xs text-muted">{rupees(item.upfront)} upfront · {rupees(item.deduction)} from salary</small></div>
-            <span className="text-xs text-muted">{item.people} people</span>
-            <ChevronRight className="h-4 w-4 text-muted" />
-          </ListRow>
-        ))}
-      </Panel>
-      <Panel title="Stock" description="Central store · Thiruvananthapuram" action={<Button variant="outline" size="sm" onClick={() => setInventoryOpen(true)}>View all items</Button>}>
-        {lowStock.length > 0 && <InlineAlert tone="warning" className="mb-3">{lowStock.length} of {uniformKit.length} items are below the reorder level.</InlineAlert>}
-        <div className="grid gap-3">
-          {uniformKit.slice(0, 6).map(item => (
-            <div key={item.item} className="grid grid-cols-[120px_1fr_48px] items-center gap-3 text-sm">
-              <span className="truncate">{item.item.split(" (")[0]}</span>
-              <ProgressBar value={Math.min(100, item.stock / 2.6)} tone={item.stock < item.reorder ? "warn" : "emerald"} />
-              <strong className="text-right tabular-nums">{item.stock}</strong>
-            </div>
-          ))}
-        </div>
-      </Panel>
-    </SplitLayout>
-    <Panel title="Requests from guards" description="Status changes appear in the guard's app immediately." flush>
-      <DataTable rows={requestFilter ? requests.filter(row => row.status === requestFilter) : requests} rowKey={row => row.id}
-        empty={<div className="p-4">{requestFilter ? <EmptyState icon={Package} message="No new requests from guards." actionLabel="Show all" onAction={() => setRequestFilter(null)} /> : <EmptyState icon={Package} message="No uniform requests from guards." />}</div>}
-        columns={[
-          { header: "Employee", cell: row => { const employee = employees.find(item => item.id === row.employeeId); return <PersonCell name={employee?.name ?? row.employeeId} id={row.employeeId} phone={employee?.phone} />; } },
-          { header: "Items", cell: row => <span className="font-medium">{row.items.map(item => `${item.item.split(" (")[0]} · ${item.size} ×${item.qty}`).join(", ")}</span> },
-          { header: "Requested", cell: row => <span className="text-xs text-muted">{formatAppDate(row.requestedOn)} · {rupees(row.amount)} · {row.recoveryPlan}</span>, hideOnMobile: true },
-          { header: "Status", cell: row => (
-            <Select className="h-9 w-36" value={row.status} onChange={event => updateStatus(row.id, event.target.value as UniformRequestStatus)} aria-label={`${row.id} status`}>
-              {(Object.keys(uniformStatusLabel) as UniformRequestStatus[]).map(status => <option key={status} value={status}>{uniformStatusLabel[status]}</option>)}
-            </Select>
-          ) },
-        ]} />
-    </Panel>
-
-    {plan && <DetailDrawer title={plan.name} subtitle="Uniform recovery plan" onClose={() => setPlan(null)}
-      footer={<>
-        <Button variant="outline" onClick={() => setPlan(null)}>Close</Button>
-        <Button onClick={() => { notify(`${plan.name} is now the default plan`); setPlan(null); }}><CheckCircle2 />Make default</Button>
-      </>}>
-      <Section title="How it's paid">
-        <DefRows rows={[
-          { label: "Paid when issued", value: rupees(plan.upfront), mono: true },
-          { label: "Recovered from salary", value: rupees(plan.deduction), mono: true },
-          { label: "Total cost to employee", value: rupees(plan.total), mono: true, total: true },
-        ]} />
-        <p className="mt-3 text-xs leading-relaxed text-muted">{plan.note}</p>
-      </Section>
-      <Section title="Uptake">
-        <KeyValue label="Employees on this plan" value={plan.people} />
-        <KeyValue label="Share of workforce" value={`${Math.round(plan.people / 468 * 100)}%`} />
-        <KeyValue label="Outstanding balance" value={rupees(plan.deduction * Math.round(plan.people * 0.4))} />
-      </Section>
-      <InlineAlert>An employee with an unpaid balance on this plan can’t complete exit clearance.</InlineAlert>
-    </DetailDrawer>}
-
-    {inventoryOpen && <DetailDrawer wide title="Uniform kit stock" subtitle="Central store · Thiruvananthapuram" onClose={() => setInventoryOpen(false)}
-      footer={<>
-        <Button variant="outline" onClick={() => setInventoryOpen(false)}>Close</Button>
-        <Button onClick={exportStock}><Download />Export stock</Button>
-      </>}>
-      {lowStock.length > 0 && <InlineAlert tone="warning" className="mb-4">{lowStock.map(item => item.item.split(" (")[0]).join(", ")} {lowStock.length === 1 ? "is" : "are"} below the reorder level.</InlineAlert>}
-      <div className="grid gap-3 sm:grid-cols-2">
-        {uniformKit.map(item => {
-          const batches = uniformBatches.filter(batch => batch.item === item.item);
-          const low = item.stock < item.reorder;
-          return (
-            <div key={item.item} className="rounded-xl border border-border p-3">
-              <strong className="block text-sm font-medium">{item.item}</strong>
-              <div className="my-1 flex justify-between text-xs text-muted"><span>{item.issued} per kit</span><span className={low ? "font-semibold text-status-danger" : ""}>{item.stock} in stock</span></div>
-              <ProgressBar value={Math.min(100, item.stock / 2.8)} tone={low ? "warn" : "emerald"} />
-              {batches.length > 0 && <div className="mt-2 grid gap-0.5">{batches.map(batch => <span key={`${batch.batchNo}-${batch.size}`} className="text-[11px] text-muted"><b className="text-foreground">{batch.batchNo}</b> · size {batch.size} · {batch.qty} pcs · {batch.receivedOn}</span>)}</div>}
-            </div>
-          );
-        })}
-      </div>
-    </DetailDrawer>}
   </>;
 }

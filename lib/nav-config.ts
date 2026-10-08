@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   Banknote,
+  Boxes,
   Building2,
   CalendarCheck,
   CalendarX,
@@ -22,6 +23,7 @@ import {
   Repeat,
   Scale,
   Settings,
+  Shirt,
   Shield,
   ShieldCheck,
   Upload,
@@ -96,7 +98,16 @@ export const internalModules: NavModule[] = [
       { label: NAV.advances, view: "advances", icon: HandCoins },
       { label: NAV.sparePayments, view: "spare-payments", icon: Banknote },
       { label: NAV.penalties, view: "penalties", icon: Scale },
-      { label: NAV.uniforms, view: "uniforms", icon: Package },
+    ],
+  },
+  {
+    id: "inventory",
+    title: "Inventory",
+    eyebrow: "Stock",
+    icon: Boxes,
+    items: [
+      { label: NAV.inventory, view: "inventory", icon: Boxes },
+      { label: NAV.uniformRequests, view: "uniform-requests", icon: Shirt },
     ],
   },
   {
@@ -208,7 +219,8 @@ export const parentView: Partial<Record<AppView, AppView>> = {
   "assignment-form": "deployment",
   "attendance-correction": "attendance",
   "payroll-allocation": "payroll",
-  "uniform-issue": "uniforms",
+  "uniform-issue": "inventory",
+  uniforms: "inventory",
   "inspection-form": "inspections",
   "complaint-form": "complaints",
   "sop-form": "site-detail",

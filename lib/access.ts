@@ -35,8 +35,9 @@ export const permissionModules: PermissionModule[] = [
   { key: "salary", label: "Salary figures and rates", group: "Finance", views: [], actions: ["view", "edit"], hint: "View shows pay rates; edit changes site and post salary rules and office exceptions." },
   { key: "advances", label: "Advances", group: "Finance", views: ["advances", "advance-form"], actions: ["view", "create", "approve"] },
   { key: "spare-payments", label: "Spare payments", group: "Finance", views: ["spare-payments"], actions: ["view", "create", "approve"] },
-  { key: "uniforms", label: "Uniforms and stock", group: "Finance", views: ["uniforms", "uniform-issue"], actions: ["view", "create", "edit", "export"] },
   { key: "penalties", label: "Penalties and deductions", group: "Finance", views: ["penalties"], actions: ["view", "create", "approve"] },
+  { key: "inventory", label: "Inventory and stock", group: "Inventory", views: ["inventory", "uniforms", "uniform-issue"], actions: ["view", "create", "edit", "export"] },
+  { key: "uniform-requests", label: "Uniform requests", group: "Inventory", views: ["uniform-requests"], actions: ["view", "approve"] },
   { key: "hr-quality", label: "HR quality", group: "People", views: ["hr-quality"], actions: ["view", "create", "edit"] },
   { key: "recruitment", label: "Recruitment", group: "People", views: ["recruitment"], actions: ["view", "create", "edit", "delete"] },
   { key: "exit-clearance", label: "Exit clearances", group: "People", views: ["exit-clearance"], actions: ["view", "create", "approve"] },
@@ -71,10 +72,19 @@ export const permissionGroups: PermissionGroup[] = Array.from(new Set(permission
 
 export type PermissionSet = ReadonlySet<PermissionKey>;
 
-/** Expands `"*"`, drops unknown keys and keeps matrix order. */
+/** The old "uniforms" module was split into inventory and uniform requests. */
+const legacyKeys: Record<PermissionKey, PermissionKey[]> = {
+  "uniforms.view": ["inventory.view", "uniform-requests.view"],
+  "uniforms.create": ["inventory.create"],
+  "uniforms.edit": ["inventory.edit", "uniform-requests.approve"],
+  "uniforms.export": ["inventory.export"],
+};
+const legacyModule: Record<string, string> = { inventory: "uniforms", "uniform-requests": "uniforms" };
+
+/** Expands `"*"` and legacy keys, drops unknown keys and keeps matrix order. */
 export function normalizeKeys(keys: readonly PermissionKey[]): PermissionKey[] {
   if (keys.includes(FULL_ACCESS)) return [...allPermissionKeys];
-  const set = new Set(keys);
+  const set = new Set(keys.flatMap(key => legacyKeys[key] ?? [key]));
   return allPermissionKeys.filter(key => set.has(key) && knownKeys.has(key));
 }
 
@@ -228,7 +238,7 @@ export type PermissionLevelMap = Record<string, PermissionLevel>;
 /** none → nothing, view → `.view`, edit → every action of the module. */
 export function keysFromLevels(levels: Partial<PermissionLevelMap>): PermissionKey[] {
   return permissionModules.flatMap(module => {
-    const level = levels[module.key] ?? "none";
+    const level = levels[module.key] ?? levels[legacyModule[module.key]] ?? "none";
     if (level === "none") return [];
     if (level === "view") return [permissionKey(module.key, "view")];
     return module.actions.map(action => permissionKey(module.key, action));
@@ -264,12 +274,12 @@ const operationsLevels: Partial<PermissionLevelMap> = {
   inspections: "edit", complaints: "edit", tickets: "edit", sops: "edit", reports: "view", analytics: "view",
 };
 const financeLevels: Partial<PermissionLevelMap> = {
-  dashboard: "edit", payroll: "edit", salary: "edit", advances: "edit", "spare-payments": "edit", uniforms: "edit",
+  dashboard: "edit", payroll: "edit", salary: "edit", advances: "edit", "spare-payments": "edit", inventory: "edit", "uniform-requests": "edit",
   penalties: "edit", "exit-clearance": "edit", reports: "edit", analytics: "view", imports: "edit", tickets: "edit",
 };
 const hrLevels: Partial<PermissionLevelMap> = {
   dashboard: "edit", workforce: "edit", sites: "view", attendance: "edit", payroll: "edit", salary: "edit", advances: "edit",
-  uniforms: "edit", penalties: "edit", "exit-clearance": "edit", "hr-quality": "edit", recruitment: "edit", tickets: "edit",
+  inventory: "edit", "uniform-requests": "edit", penalties: "edit", "exit-clearance": "edit", "hr-quality": "edit", recruitment: "edit", tickets: "edit",
   complaints: "edit", reports: "edit", analytics: "view", imports: "edit", settings: "edit",
 };
 const fieldOfficerLevels: Partial<PermissionLevelMap> = {

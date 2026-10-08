@@ -3,7 +3,7 @@ import type {
   EmployeePayRule, ExitRecord, ExportTemplate, FoTask, GuardChangeEvent,
   PayrollDeduction, PostRateRule, Rating, NightCheck, RecruitmentVacancy, SatisfactionCall,
   Site, SiteDocument, SiteFeedback, SitePayRule, Skill, SpareDutyPayment,
-  StatutorySettings, Ticket, UniformBatch, UniformRequest,
+  StatutorySettings, Ticket, SiteCalendarMark,
 } from "@/types/domain";
 
 export const employees: Employee[] = [
@@ -280,22 +280,6 @@ export const inspections = [
   { site:"LMG Junction", officer:"Niyas P", window:"08:00–10:00", status:"Completed", distance:"—" },
 ];
 
-/** The 12-item kit issued on joining. */
-export const uniformKit = [
-  { item:"Shirt (full sleeve)", issued:2, stock:184, reorder:60 },
-  { item:"Trousers", issued:2, stock:156, reorder:60 },
-  { item:"Shoes (black)", issued:1, stock:98, reorder:40 },
-  { item:"Belt", issued:1, stock:221, reorder:50 },
-  { item:"Cap", issued:1, stock:176, reorder:50 },
-  { item:"Raincoat", issued:1, stock:63, reorder:70 },
-  { item:"Sweater", issued:1, stock:112, reorder:40 },
-  { item:"Name badge", issued:1, stock:268, reorder:60 },
-  { item:"Shoulder epaulette", issued:2, stock:204, reorder:50 },
-  { item:"Whistle and lanyard", issued:1, stock:147, reorder:40 },
-  { item:"Torch", issued:1, stock:58, reorder:60 },
-  { item:"Baton holder", issued:1, stock:131, reorder:40 },
-];
-
 /** The three uniform recovery options offered at issuance. */
 export const uniformPlans = [
   { name:"Full upfront payment", upfront:1960, deduction:0,    total:1960, people:112, note:"Settled at issuance, nothing carried into payroll." },
@@ -509,19 +493,15 @@ export const spareDutyPayments: SpareDutyPayment[] = [
   { id:"SP-2", employeeId:"BMG-2260", date:"2026-09-10", site:"Caritas Hospital",  amount:516, status:"queued" },
 ];
 
-export const uniformBatches: UniformBatch[] = [
-  { batchNo:"UB-2607", item:"Shirt (full sleeve)", size:"M",  qty:64, receivedOn:"2026-07-18" },
-  { batchNo:"UB-2607", item:"Shirt (full sleeve)", size:"L",  qty:72, receivedOn:"2026-07-18" },
-  { batchNo:"UB-2607", item:"Shirt (full sleeve)", size:"XL", qty:48, receivedOn:"2026-07-18" },
-  { batchNo:"UB-2611", item:"Trousers",            size:"32", qty:80, receivedOn:"2026-08-02" },
-  { batchNo:"UB-2611", item:"Trousers",            size:"34", qty:76, receivedOn:"2026-08-02" },
-  { batchNo:"UB-2598", item:"Shoes (black)",       size:"8",  qty:40, receivedOn:"2026-06-25" },
-  { batchNo:"UB-2598", item:"Shoes (black)",       size:"9",  qty:58, receivedOn:"2026-06-25" },
-];
-
-export const uniformRequests: UniformRequest[] = [
-  { id:"UR-1", employeeId:"BMG-1840", items:[{ item:"Shirt (full sleeve)", size:"L", qty:1 }], status:"dispatched", requestedOn:"2026-09-06", amount:450, recoveryPlan:"Full salary deduction" },
-  { id:"UR-2", employeeId:"BMG-2087", items:[{ item:"Shoes (black)", size:"9", qty:1 }], status:"requested", requestedOn:"2026-09-10", amount:900, recoveryPlan:"Partial advance" },
+/** Company holidays apply to every site; closures and events are per site. */
+export const siteCalendarMarks: SiteCalendarMark[] = [
+  { id:"CM-1", siteId:"all", type:"holiday", title:"Thiruvonam", start:"2026-08-26", end:"2026-08-26", payMultiplier:2 },
+  { id:"CM-2", siteId:"all", type:"holiday", title:"Gandhi Jayanti", start:"2026-10-02", end:"2026-10-02", payMultiplier:2 },
+  { id:"CM-3", siteId:"all", type:"holiday", title:"Deepavali", start:"2026-11-08", end:"2026-11-08", payMultiplier:2 },
+  { id:"CM-4", siteId:"all", type:"holiday", title:"Christmas", start:"2026-12-25", end:"2026-12-25", payMultiplier:2 },
+  { id:"CM-5", siteId:"Lulu Mall, Kochi", type:"event", title:"Pooja sale weekend", start:"2026-09-26", end:"2026-09-27", extraGuards:4, from:"16:00", to:"23:00", notes:"Extra cover at the atrium and parking ramps." },
+  { id:"CM-6", siteId:"Lulu Mall, Kochi", type:"closure", title:"Annual maintenance shutdown", start:"2026-10-04", end:"2026-10-04" },
+  { id:"CM-7", siteId:"Lulu Mall, Kochi", type:"note", title:"Client audit visit", start:"2026-09-24", end:"2026-09-24", notes:"Facility manager walks the posts at 11:00." },
 ];
 
 export const satisfactionCalls: SatisfactionCall[] = [
