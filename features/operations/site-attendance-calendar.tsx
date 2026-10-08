@@ -6,17 +6,21 @@ import classicThemePlugin from "@fullcalendar/react/themes/classic";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
 import timeGridPlugin from "@fullcalendar/react/timegrid";
 import listPlugin from "@fullcalendar/react/list";
+import interactionPlugin from "@fullcalendar/react/interaction";
 import "@fullcalendar/react/skeleton.css";
 import "@fullcalendar/react/themes/classic/theme.css";
 import "@fullcalendar/react/themes/classic/palette.css";
 import { BackCrumb, Button, CallButton, DefRows, EmptyState, PageHeader, Panel, SegmentedControl, Sheet, StatusChip } from "@/components/ui-kit";
-import { Building2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Building2, CalendarPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import { useSiteCalendar } from "@/components/shared/site-calendar-context";
+import { isClosed, markColor, markLabel, markTypeLabel, marksFor } from "@/lib/site-calendar";
+import { SiteCalendarMarkSheet } from "./site-calendar-mark-sheet";
 import { cn } from "@/lib/utils";
 import { employees, sites } from "@/lib/mock-data";
 import { NAV } from "@/lib/labels";
 import { APP_TODAY, formatAppDate } from "@/lib/app-date";
 import { NOW_MINUTES, addDays, clock, duration, nowAbs, shiftStateLabel, siteShifts, type ShiftState, type SiteShift } from "@/lib/site-attendance";
-import type { Site } from "@/types/domain";
+import type { CalendarMarkType, Site, SiteCalendarMark } from "@/types/domain";
 
 /** Event colours per attendance outcome, matching the app's status tokens. */
 const stateColor: Record<ShiftState, string> = {
@@ -60,13 +64,20 @@ const viewMinWidth: Record<CalendarView, string | undefined> = {
   timeGridDay: undefined,
 };
 
+type MarkDraft = Partial<SiteCalendarMark> & { start: string; end: string };
+
 export function SiteAttendanceCalendar({ site }: { site: Site }) {
   const [selected, setSelected] = useState<SiteShift | null>(null);
+  const [draft, setDraft] = useState<MarkDraft | null>(null);
+  const { marks } = useSiteCalendar();
   const controller = useCalendarController();
   const scrollRef = useRef<HTMLDivElement>(null);
   const view = (controller.view?.type ?? "listWeek") as CalendarView;
 
-  const events = useMemo(() => siteShifts(site, addDays(APP_TODAY, -60), addDays(APP_TODAY, 30)).map(shift => {
+  const siteMarks = useMemo(() => marksFor(marks, site.name), [marks, site.name]);
+
+  // Closed days need no guards, so their shifts (and absences) are dropped.
+  const shiftEvents = useMemo(() => siteShifts(site, addDays(APP_TODAY, -60), addDays(APP_TODAY, 30)).filter(shift => !isClosed(siteMarks, site.name, iso(shift.plannedStart).slice(0, 10))).map(shift => {
     // Blocks stay inside the scheduled window so shift handovers don't stack; late starts and early exits still shorten them.
     const start = Math.max(shift.actualStart ?? shift.plannedStart, shift.plannedStart);
     const end = shift.state === "on-duty" ? nowAbs() : Math.min(shift.actualEnd ?? shift.plannedEnd, shift.plannedEnd);
@@ -78,7 +89,14 @@ export function SiteAttendanceCalendar({ site }: { site: Site }) {
       color: stateColor[shift.state],
       extendedProps: { shift },
     };
-  }), [site]);
+  }), [site, siteMarks]);
+
+  // Each mark is a tinted day background plus a labelled all-day event; FullCalendar all-day ends are exclusive.
+  const markEvents = useMemo(() => siteMarks.flatMap(mark => [
+    { id: `${mark.id}-bg`, start: mark.start, end: addDays(mark.end, 1), allDay: true, display: "background", color: markColor[mark.type] },
+    { id: mark.id, title: markLabel(mark), start: mark.start, end: addDays(mark.end, 1), allDay: true, color: markColor[mark.type], extendedProps: { mark } },
+  ]), [siteMarks]);
+  const events = useMemo(() => [...markEvents, ...shiftEvents], [markEvents, shiftEvents]);
 
   return <>
   <Panel>
@@ -89,13 +107,16 @@ export function SiteAttendanceCalendar({ site }: { site: Site }) {
         <Button variant="ghost" size="icon" aria-label="Next" onClick={() => controller.next()}><ChevronRight /></Button>
       </div>
       <strong className="text-base font-semibold">{controller.view?.title}</strong>
-      <SegmentedControl className="mb-0 ml-auto" options={viewOptions} value={view} onChange={next => controller.changeView(next)} />
+      <Button variant="outline" size="sm" className="ml-auto" onClick={() => setDraft({ start: APP_TODAY, end: APP_TODAY })}><CalendarPlus />Add holiday or event</Button>
+      <SegmentedControl className="mb-0" options={viewOptions} value={view} onChange={next => controller.changeView(next)} />
     </div>
     <div ref={scrollRef} className="sms-calendar max-h-[70vh] min-h-[320px] overflow-auto rounded-xl border border-border">
       <div className={cn(viewMinWidth[view])}>
       <FullCalendar
         controller={controller}
-        plugins={[classicThemePlugin, listPlugin, dayGridPlugin, timeGridPlugin]}
+        plugins={[classicThemePlugin, listPlugin, dayGridPlugin, timeGridPlugin, interactionPlugin]}
+        selectable
+        select={info => setDraft({ start: info.startStr.slice(0, 10), end: info.allDay ? addDays(info.endStr.slice(0, 10), -1) : info.startStr.slice(0, 10) })}
         initialView="listWeek"
         initialDate={APP_TODAY}
         now={NOW}
@@ -117,13 +138,20 @@ export function SiteAttendanceCalendar({ site }: { site: Site }) {
         }}
         navLinks
         nowIndicator
-        allDaySlot={false}
+        allDaySlot
         displayEventEnd
         nextDayThreshold="12:00:00"
         eventTimeFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
         slotHeaderFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
         events={events}
         eventContent={arg => {
+          const mark = arg.event.extendedProps.mark as SiteCalendarMark | undefined;
+          if (arg.event.display === "background") return null;
+          if (mark) {
+            return <span className="flex min-w-0 items-center gap-1.5 px-1 text-[11px] font-semibold leading-tight text-white">
+              <span className="truncate">{arg.view.type.startsWith("list") ? <span className="text-foreground">{markTypeLabel[mark.type]} · {markLabel(mark)}</span> : markLabel(mark)}</span>
+            </span>;
+          }
           const shift = arg.event.extendedProps.shift as SiteShift;
           if (arg.view.type.startsWith("list")) {
             return <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -148,10 +176,14 @@ export function SiteAttendanceCalendar({ site }: { site: Site }) {
           </span>;
         }}
         eventClass={arg => {
+          if (arg.event.extendedProps.mark || arg.event.display === "background") return "sms-event-mark";
           const state = (arg.event.extendedProps.shift as SiteShift).state;
           return cn(arg.view.type.startsWith("timeGrid") && "sms-event-pinned", state === "scheduled" ? "sms-event-scheduled" : state === "absent" && "sms-event-absent");
         }}
-        eventClick={info => setSelected(info.event.extendedProps.shift as SiteShift)}
+        eventClick={info => {
+          const mark = info.event.extendedProps.mark as SiteCalendarMark | undefined;
+          if (mark) setDraft(mark); else setSelected(info.event.extendedProps.shift as SiteShift);
+        }}
       />
       </div>
     </div>
@@ -163,9 +195,18 @@ export function SiteAttendanceCalendar({ site }: { site: Site }) {
           {state === "late" ? "Late or left early" : shiftStateLabel[state]}
         </span>
       ))}
+      <span className="hidden h-3 w-px bg-border sm:inline-block" />
+      {(Object.keys(markColor) as CalendarMarkType[]).map(type => (
+        <span key={type} className="inline-flex items-center gap-1.5">
+          <span className="size-2.5 rounded-sm" style={{ background: markColor[type] }} />
+          {markTypeLabel[type]}
+        </span>
+      ))}
+      <span className="w-full sm:w-auto sm:ml-auto">Drag across days in Month or Week view to add a holiday, closure or event.</span>
     </div>
 
   </Panel>
+    {draft && <SiteCalendarMarkSheet key={draft.id ?? `${draft.start}-${draft.end}`} siteName={site.name} mark={draft} onClose={() => setDraft(null)} />}
     <Sheet open={!!selected} title={selected?.name ?? ""} subtitle={selected ? `${selected.empId} · ${selected.role}` : undefined} onClose={() => setSelected(null)}>
       {selected && (() => {
         const worked = selected.actualStart !== undefined ? (selected.actualEnd ?? nowAbs()) - selected.actualStart : 0;
@@ -199,7 +240,7 @@ export function SiteAttendanceScreen({ siteName, onBack, onBackToSites }: { site
   }
   return <>
     <BackCrumb backLabel={site.name} onBack={onBack} current="Attendance calendar" />
-    <PageHeader title="Attendance calendar" subtitle={`${site.name} · Who was on site each day, and from when to when. Select a shift for punch details.`} />
+    <PageHeader title="Attendance calendar" subtitle={`${site.name} · Who was on site each day, and from when to when. Select a shift for punch details, or mark holidays, closures and events.`} />
     <SiteAttendanceCalendar site={site} />
   </>;
 }
