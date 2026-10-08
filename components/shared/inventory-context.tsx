@@ -7,14 +7,14 @@ import { inventoryItems, stockMovements, stores, uniformRequests } from "@/lib/i
 import type { InventoryItem, StockMovement, Store, UniformRequest, UniformRequestStatus } from "@/types/domain";
 import { usePersistedState } from "./use-persisted-state";
 
-type InventoryState = { items: InventoryItem[]; movements: StockMovement[]; requests: UniformRequest[] };
+type InventoryState = { items: InventoryItem[]; movements: StockMovement[]; requests: UniformRequest[]; stores: Store[] };
 
 /** A movement before it gets an id. */
 export type NewMovement = Omit<StockMovement, "id">;
 
 type InventoryValue = InventoryState & {
-  stores: Store[];
   ready: boolean;
+  upsertStore: (store: Store) => void;
   /** Validates every movement against the ledger (in order) and posts all or none. Returns an error message or null. */
   post: (movements: NewMovement | NewMovement[]) => string | null;
   upsertItem: (item: InventoryItem) => void;
@@ -25,12 +25,14 @@ type InventoryValue = InventoryState & {
 
 const InventoryContext = createContext<InventoryValue | null>(null);
 
-const seed: InventoryState = { items: inventoryItems, movements: stockMovements, requests: uniformRequests };
+const seed: InventoryState = { items: inventoryItems, movements: stockMovements, requests: uniformRequests, stores };
 const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
 
 /** Stock items, the movement ledger and uniform requests, shared by the inventory pages and the guard app. */
 export function InventoryProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState, ready] = usePersistedState<InventoryState>("bmg-inventory-v1", seed);
+  const [stored, setState, ready] = usePersistedState<InventoryState>("bmg-inventory-v1", seed);
+  // Data saved before stores became editable has no store list.
+  const state = useMemo(() => stored.stores ? stored : { ...stored, stores }, [stored]);
   // Mirrors the latest state so actions can validate synchronously and return an error.
   const latest = useRef(state);
   useEffect(() => { latest.current = state; }, [state]);
@@ -71,8 +73,8 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
 
     return {
       ...state,
-      stores,
       ready,
+      upsertStore: store => commit({ ...latest.current, stores: latest.current.stores.some(entry => entry.id === store.id) ? latest.current.stores.map(entry => entry.id === store.id ? store : entry) : [...latest.current.stores, store] }),
       post,
       setRequestStatus,
       upsertItem: item => commit({ ...latest.current, items: latest.current.items.some(entry => entry.id === item.id) ? latest.current.items.map(entry => entry.id === item.id ? item : entry) : [...latest.current.items, item] }),

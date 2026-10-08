@@ -21,6 +21,8 @@ export const NAV = {
   uniforms: "Uniforms",
   inventory: "Inventory",
   uniformRequests: "Uniform requests",
+  stores: "Stores",
+  recoveryPlans: "Recovery plans",
   inspections: "Field officer inspections",
   complaints: "Complaints",
   tickets: "Tickets",

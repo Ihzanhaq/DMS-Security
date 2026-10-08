@@ -12,7 +12,7 @@ export type BenefitScheme = "salary-only" | "esi" | "pf-esi";
 
 export type AppView =
   | "dashboard" | "workforce" | "sites" | "deployment" | "attendance"
-  | "payroll" | "advances" | "uniforms" | "inventory" | "uniform-requests" | "inspections" | "complaints"
+  | "payroll" | "advances" | "uniforms" | "inventory" | "uniform-requests" | "inventory-stores" | "recovery-plans" | "stock-movement" | "inventory-item" | "inspections" | "complaints"
   | "reports" | "imports" | "settings"
   | "employee-form" | "site-config" | "site-detail" | "site-attendance" | "assignment-form" | "attendance-correction"
   | "payroll-allocation" | "night-vigilance" | "uniform-issue" | "exit-clearance"

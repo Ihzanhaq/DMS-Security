@@ -145,7 +145,7 @@ export function UniformRequestsScreen({ onNavigate }: { onNavigate: (view: strin
 
     {blocked && <Sheet open side="center" title="Not enough stock to dispatch" subtitle={`${storeName(blocked.request.storeId)} · ${linesText(blocked.request)}`} onClose={() => setBlocked(null)}
       footer={<><Button variant="outline" onClick={() => setBlocked(null)}>Close</Button>
-        <Button onClick={() => { const line = requestShortfall(movements, blocked.request)[0]; setBlocked(null); onNavigate("inventory", { tab: `transfer:${line?.itemId ?? ""}|${line?.size ?? ""}||${blocked.request.storeId}` }); }}><ArrowLeftRight />Transfer stock in</Button></>}>
+        <Button onClick={() => { const line = requestShortfall(movements, blocked.request)[0]; setBlocked(null); onNavigate("stock-movement", { tab: `transfer:${line?.itemId ?? ""}|${line?.size ?? ""}||${blocked.request.storeId}` }); }}><ArrowLeftRight />Transfer stock in</Button></>}>
       <InlineAlert tone="danger">{blocked.message}</InlineAlert>
       <p className="mt-3 text-sm text-muted">Move stock from another store to {storeName(blocked.request.storeId)}, or receive a new batch, then dispatch again.</p>
     </Sheet>}

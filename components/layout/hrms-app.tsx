@@ -11,6 +11,9 @@ import { SiteAttendanceScreen } from "@/features/operations/site-attendance-cale
 import { AdvancesScreen, PayrollScreen, SparePaymentsScreen } from "@/features/payroll/payroll-screens";
 import { InventoryScreen } from "@/features/inventory/inventory-screen";
 import { UniformRequestsScreen } from "@/features/inventory/uniform-requests-screen";
+import { IssueStockScreen, InventoryItemScreen, StockMovementScreen } from "@/features/inventory/inventory-forms";
+import { StoresScreen } from "@/features/inventory/stores-screen";
+import { RecoveryPlansScreen } from "@/features/inventory/recovery-plans-screen";
 import { ComplaintsScreen, ImportsScreen, ReportsScreen, SettingsScreen } from "@/features/compliance/compliance-screens";
 import { TicketsScreen } from "@/features/compliance/tickets-screen";
 import { AnalyticsScreen } from "@/features/reports/analytics-screens";
@@ -231,8 +234,8 @@ function HrmsShell() {
 
   const navigate = (nextView: string, meta?: string | NavClickMeta) => {
     const options = parseNavMeta(meta);
-    const viewKey = nextView === "sops" ? "sites" : nextView === "uniforms" || nextView === "uniform-issue" ? "inventory" : nextView;
-    setInventoryIntent(nextView === "uniform-issue" ? "issue" : viewKey === "inventory" ? options?.tab : undefined);
+    const viewKey = nextView === "sops" ? "sites" : nextView === "uniforms" ? "inventory" : nextView;
+    setInventoryIntent(["inventory", "stock-movement", "inventory-item"].includes(viewKey) ? options?.tab : undefined);
     if (options?.site) setSelectedSite(options.site);
     if (viewKey === "access") setAccessTab(isAccessTab(options?.tab) ? options.tab : "members");
     if (options?.roleId) setSelectedRoleId(options.roleId);
@@ -529,7 +532,11 @@ function renderView(view: AppView, ctx: ViewContext) {
     case "payroll": return <PayrollScreen onNavigate={navigate} onAllocation={openAllocationAudit} />;
     case "advances": return <AdvancesScreen onNavigate={navigate} onCreate={() => navigate("advance-form")} />;
     case "uniforms":
-    case "inventory": return <InventoryScreen key={inventoryIntent ?? "inventory"} intent={inventoryIntent} onImport={() => openImports("Opening balances")} />;
+    case "inventory": return <InventoryScreen key={inventoryIntent ?? "inventory"} intent={inventoryIntent} onNavigate={navigate} onImport={() => openImports("Opening balances")} />;
+    case "inventory-stores": return <StoresScreen onNavigate={navigate} />;
+    case "recovery-plans": return <RecoveryPlansScreen />;
+    case "stock-movement": return <StockMovementScreen key={inventoryIntent ?? "receive"} intent={inventoryIntent} onBack={() => navigate("inventory")} onModeChange={tab => navigate("stock-movement", { tab })} />;
+    case "inventory-item": return <InventoryItemScreen key={inventoryIntent ?? "new"} itemId={inventoryIntent || undefined} onBack={() => navigate("inventory")} />;
     case "uniform-requests": return <UniformRequestsScreen onNavigate={navigate} />;
     case "inspections": return <InspectionsScreen onNavigate={navigate} onLog={() => navigate("inspection-form")} />;
     case "complaints": return <ComplaintsScreen onNavigate={navigate} onCreate={() => navigate("complaint-form")} />;
@@ -563,7 +570,7 @@ function renderView(view: AppView, ctx: ViewContext) {
     case "action-centre": return <ActionCentreScreen onOpen={navigate} />;
     case "assignment-form": return <DetailedWorkflowScreen kind="assignment" onBack={() => navigate("deployment")} />;
     case "attendance-correction": return <DetailedWorkflowScreen kind="attendance" onBack={() => navigate("attendance")} />;
-    case "uniform-issue": return <InventoryScreen key="issue" intent="issue" onImport={() => openImports("Opening balances")} />;
+    case "uniform-issue": return <IssueStockScreen onBack={() => navigate("inventory")} />;
     case "inspection-form": return <DetailedWorkflowScreen kind="inspection" onBack={() => navigate("inspections")} />;
     case "complaint-form": return <DetailedWorkflowScreen kind="complaint" onBack={() => navigate(role.kind === "client" ? "client-complaints" : "complaints")} />;
     case "sop-form": return (

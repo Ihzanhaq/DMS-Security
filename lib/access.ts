@@ -36,7 +36,7 @@ export const permissionModules: PermissionModule[] = [
   { key: "advances", label: "Advances", group: "Finance", views: ["advances", "advance-form"], actions: ["view", "create", "approve"] },
   { key: "spare-payments", label: "Spare payments", group: "Finance", views: ["spare-payments"], actions: ["view", "create", "approve"] },
   { key: "penalties", label: "Penalties and deductions", group: "Finance", views: ["penalties"], actions: ["view", "create", "approve"] },
-  { key: "inventory", label: "Inventory and stock", group: "Inventory", views: ["inventory", "uniforms", "uniform-issue"], actions: ["view", "create", "edit", "export"] },
+  { key: "inventory", label: "Inventory and stock", group: "Inventory", views: ["inventory", "uniforms", "uniform-issue", "inventory-stores", "recovery-plans", "stock-movement", "inventory-item"], actions: ["view", "create", "edit", "export"] },
   { key: "uniform-requests", label: "Uniform requests", group: "Inventory", views: ["uniform-requests"], actions: ["view", "approve"] },
   { key: "hr-quality", label: "HR quality", group: "People", views: ["hr-quality"], actions: ["view", "create", "edit"] },
   { key: "recruitment", label: "Recruitment", group: "People", views: ["recruitment"], actions: ["view", "create", "edit", "delete"] },

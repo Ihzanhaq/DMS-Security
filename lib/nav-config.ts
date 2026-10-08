@@ -31,6 +31,7 @@ import {
   UserRound,
   Users,
   Wallet,
+  Warehouse,
 } from "lucide-react";
 import { NAV } from "@/lib/labels";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
@@ -108,6 +109,8 @@ export const internalModules: NavModule[] = [
     items: [
       { label: NAV.inventory, view: "inventory", icon: Boxes },
       { label: NAV.uniformRequests, view: "uniform-requests", icon: Shirt },
+      { label: NAV.stores, view: "inventory-stores", icon: Warehouse },
+      { label: NAV.recoveryPlans, view: "recovery-plans", icon: HandCoins },
     ],
   },
   {
@@ -221,6 +224,8 @@ export const parentView: Partial<Record<AppView, AppView>> = {
   "payroll-allocation": "payroll",
   "uniform-issue": "inventory",
   uniforms: "inventory",
+  "stock-movement": "inventory",
+  "inventory-item": "inventory",
   "inspection-form": "inspections",
   "complaint-form": "complaints",
   "sop-form": "site-detail",

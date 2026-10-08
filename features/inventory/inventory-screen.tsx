@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, ArrowLeftRight, Boxes, CheckCircle2, ChevronRight, Download, HandHelping, Pencil, PackagePlus, Plus, Shirt, SlidersHorizontal, Undo2, Upload, Wallet } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Boxes, ChevronRight, Download, HandHelping, Pencil, PackagePlus, Plus, Shirt, SlidersHorizontal, Undo2, Upload, Wallet } from "lucide-react";
 import {
-  Button, DataTable, DefRows, DetailDrawer, EmptyState, FilterChips, InlineAlert, KeyValue, ListFilterRow, ListRow, PageHeader, Panel,
-  PersonCell, SearchBar, Section, SegmentedControl, Select, Sheet, SplitLayout, StatStrip, StatusChip, type StatusTone,
+  Button, DataTable, DefRows, EmptyState, FilterChips, InlineAlert, ListFilterRow, PageHeader, Panel,
+  PersonCell, SearchBar, Section, SegmentedControl, Select, Sheet, StatStrip, StatusChip, type StatusTone,
 } from "@/components/ui-kit";
 import { useInventory } from "@/components/shared/inventory-context";
 import { useToast } from "@/components/shared/toast-context";
@@ -12,12 +12,12 @@ import { APP_TODAY, formatAppDate } from "@/lib/app-date";
 import { downloadCsv } from "@/lib/download";
 import { ONE_SIZE, assetsOut, movementDeltas, movementTypeLabel, onHand, sizesOf, stockStatus, stockValue, type AssetHolding, type StockStatus } from "@/lib/inventory";
 import { NAV } from "@/lib/labels";
-import { employees, rupees, uniformPlans } from "@/lib/mock-data";
+import { employees, rupees } from "@/lib/mock-data";
 import type { InventoryCategory, InventoryItem, MovementType, StockMovement } from "@/types/domain";
-import { IssueDrawer, ItemFormDrawer, MovementDrawer, type MovementMode, type Prefill } from "./inventory-drawers";
+import type { NavClickMeta } from "@/lib/nav-config";
+import { movementIntent } from "./inventory-forms";
 
 type Tab = "stock" | "movements" | "assets" | "items";
-type Drawer = { kind: MovementMode; prefill?: Prefill } | { kind: "issue" } | { kind: "item"; item?: InventoryItem } | null;
 
 const statusTone: Record<StockStatus, StatusTone> = { ok: "success", low: "warning", out: "danger" };
 const statusText: Record<StockStatus, string> = { ok: "In stock", low: "Low", out: "Out of stock" };
@@ -25,16 +25,6 @@ const movementTone: Record<MovementType, StatusTone> = { receipt: "success", iss
 
 const sizeText = (size: string) => size === ONE_SIZE ? "One size" : size;
 const employeeName = (id?: string) => employees.find(employee => employee.id === id)?.name ?? id ?? "";
-
-/** Parses the intent the app shell passes in, e.g. "issue" or "transfer:shirt|M|central|kochi" (item|size|from|to). */
-function drawerFromIntent(intent?: string): Drawer {
-  if (!intent) return null;
-  if (intent === "issue") return { kind: "issue" };
-  const [kind, rest] = intent.split(":");
-  if (kind !== "receive" && kind !== "transfer" && kind !== "adjust") return null;
-  const [itemId, size, storeId, toStoreId] = (rest ?? "").split("|");
-  return { kind, prefill: { itemId: itemId || undefined, size: size || undefined, storeId: storeId || undefined, toStoreId: toStoreId || undefined } };
-}
 
 /** Signed change for the table: what the movement did to the store being viewed (or overall). */
 function signedQty(movement: StockMovement, storeId: string) {
@@ -46,18 +36,18 @@ function signedQty(movement: StockMovement, storeId: string) {
   return delta < 0 ? { text: `−${-delta}`, tone: "text-status-danger" } : { text: `+${delta}`, tone: "text-emerald" };
 }
 
-export function InventoryScreen({ intent, onImport }: { intent?: string; onImport: () => void }) {
+export function InventoryScreen({ intent, onImport, onNavigate }: { intent?: string; onImport: () => void; onNavigate: (view: string, meta?: string | NavClickMeta) => void }) {
   const { items, stores, movements, post } = useInventory();
   const notify = useToast();
   const [tab, setTab] = useState<Tab>("stock");
-  const [storeId, setStoreId] = useState("all");
+  const [storeId, setStoreId] = useState(intent?.startsWith("store:") ? intent.slice(6) : "all");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<"all" | InventoryCategory>("all");
   const [lowOnly, setLowOnly] = useState(false);
   const [typeFilter, setTypeFilter] = useState<"all" | MovementType>("all");
-  const [drawer, setDrawer] = useState<Drawer>(() => drawerFromIntent(intent));
+  const openMovement = (mode: "receive" | "transfer" | "adjust", itemId?: string) => onNavigate("stock-movement", { tab: movementIntent(mode, { itemId, storeId: mode === "receive" || !scope ? undefined : scope }) });
+  const openItem = (itemId?: string) => onNavigate("inventory-item", { tab: itemId ?? "" });
   const [detail, setDetail] = useState<InventoryItem | null>(null);
-  const [plan, setPlan] = useState<(typeof uniformPlans)[number] | null>(null);
   const scope = storeId === "all" ? undefined : storeId;
   const storeName = (id?: string) => stores.find(store => store.id === id)?.name ?? id ?? "";
 
@@ -98,8 +88,8 @@ export function InventoryScreen({ intent, onImport }: { intent?: string; onImpor
     <PageHeader title={NAV.inventory} subtitle="Uniforms and duty equipment across stores. Every change is recorded in the movement ledger."
       actions={<>
         <Button variant="outline" onClick={onImport}><Upload />Import balances</Button>
-        <Button variant="outline" onClick={() => setDrawer({ kind: "issue" })}><HandHelping />Issue</Button>
-        <Button onClick={() => setDrawer({ kind: "receive" })}><PackagePlus />Receive stock</Button>
+        <Button variant="outline" onClick={() => onNavigate("uniform-issue")}><HandHelping />Issue</Button>
+        <Button onClick={() => openMovement("receive")}><PackagePlus />Receive stock</Button>
       </>} />
     <StatStrip items={[
       { icon: Boxes, value: String(stockRows.length), label: "Active items", note: `${items.filter(item => item.category === "uniform" && item.active).length} uniform · ${items.filter(item => item.category === "equipment" && item.active).length} equipment`, onClick: () => { setTab("items"); }, actionLabel: "Open the item catalogue" },
@@ -111,8 +101,8 @@ export function InventoryScreen({ intent, onImport }: { intent?: string; onImpor
     <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
       <SegmentedControl className="mb-0" value={tab} onChange={setTab} options={[{ id: "stock", label: "Stock" }, { id: "movements", label: "Movements" }, { id: "assets", label: "Assets out" }, { id: "items", label: "Items" }]} />
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" onClick={() => setDrawer({ kind: "transfer" })}><ArrowLeftRight />Transfer</Button>
-        <Button variant="outline" size="sm" onClick={() => setDrawer({ kind: "adjust" })}><SlidersHorizontal />Adjust</Button>
+        <Button variant="outline" size="sm" onClick={() => openMovement("transfer")}><ArrowLeftRight />Transfer</Button>
+        <Button variant="outline" size="sm" onClick={() => openMovement("adjust")}><SlidersHorizontal />Adjust</Button>
         <div className="w-52"><Select aria-label="Store" value={storeId} onChange={event => setStoreId(event.target.value)}>
           <option value="all">All stores</option>
           {stores.map(store => <option key={store.id} value={store.id}>{store.name}</option>)}
@@ -120,8 +110,7 @@ export function InventoryScreen({ intent, onImport }: { intent?: string; onImpor
       </div>
     </div>
 
-    <SplitLayout wideFirst>
-      <div className="min-w-0">
+    <div className="min-w-0">
         {showSearch && <ListFilterRow>
           <SearchBar className="mb-0 sm:w-80" value={query} onChange={setQuery} placeholder={tab === "stock" ? "Search items" : "Search item, employee, batch or reason"} />
           {tab === "stock"
@@ -167,8 +156,8 @@ export function InventoryScreen({ intent, onImport }: { intent?: string; onImpor
             ]} />
         </Panel>}
 
-        {tab === "items" && <Panel flush title="Item catalogue" description="What the stores hold. Deactivate an item to stop issuing it; its history stays." action={<Button size="sm" onClick={() => setDrawer({ kind: "item" })}><Plus />Add item</Button>}>
-          <DataTable rows={items} rowKey={row => row.id} onRowClick={row => setDrawer({ kind: "item", item: row })}
+        {tab === "items" && <Panel flush title="Item catalogue" description="What the stores hold. Deactivate an item to stop issuing it; its history stays." action={<Button size="sm" onClick={() => openItem()}><Plus />Add item</Button>}>
+          <DataTable rows={items} rowKey={row => row.id} onRowClick={row => openItem(row.id)}
             columns={[
               { header: "Item", cell: row => <strong className="font-medium">{row.name}</strong> },
               { header: "Type", cell: row => <span className="text-sm">{row.category === "uniform" ? "Uniform" : "Equipment"} · {row.kind === "asset" ? "Returnable" : "Consumable"}</span> },
@@ -178,62 +167,13 @@ export function InventoryScreen({ intent, onImport }: { intent?: string; onImpor
               { header: "Status", cell: row => <StatusChip tone={row.active ? "success" : "neutral"}>{row.active ? "Active" : "Inactive"}</StatusChip> },
             ]} />
         </Panel>}
-      </div>
-
-      <div className="grid content-start gap-4">
-        <Panel title="Stores" description="On hand across all items.">
-          <div className="grid gap-1">
-            {stores.map(store => {
-              const units = items.reduce((sum, item) => sum + onHand(movements, { itemId: item.id, storeId: store.id }), 0);
-              return <ListRow key={store.id} onClick={() => setStoreId(store.id)} active={storeId === store.id}>
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald/10 text-emerald"><Boxes className="h-4 w-4" /></span>
-                <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{store.name}</strong><small className="text-xs text-muted">{store.city}</small></div>
-                <span className="text-sm tabular-nums">{units.toLocaleString("en-IN")} units</span>
-              </ListRow>;
-            })}
-          </div>
-        </Panel>
-        <Panel title="Uniform recovery plans" description="Offered when a uniform is issued. Can be overridden per employee.">
-          {uniformPlans.map(item => (
-            <ListRow key={item.name} onClick={() => setPlan(item)}>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald/10 text-emerald"><Shirt className="h-4 w-4" /></span>
-              <div className="min-w-0 flex-1"><strong className="block text-sm font-medium">{item.name}</strong><small className="text-xs text-muted">{rupees(item.upfront)} upfront · {rupees(item.deduction)} from salary</small></div>
-              <span className="text-xs text-muted">{item.people} people</span>
-              <ChevronRight className="h-4 w-4 text-muted" />
-            </ListRow>
-          ))}
-        </Panel>
-      </div>
-    </SplitLayout>
+    </div>
 
     {detail && <ItemDetailSheet item={detail} onClose={() => setDetail(null)}
-      onEdit={() => { setDrawer({ kind: "item", item: detail }); setDetail(null); }}
-      onReceive={() => { setDrawer({ kind: "receive", prefill: { itemId: detail.id } }); setDetail(null); }} />}
+      onEdit={() => openItem(detail.id)}
+      onReceive={() => openMovement("receive", detail.id)} />}
 
-    {drawer?.kind === "issue" && <IssueDrawer onClose={() => setDrawer(null)} />}
-    {drawer?.kind === "item" && <ItemFormDrawer item={drawer.item} onClose={() => setDrawer(null)} />}
-    {drawer && (drawer.kind === "receive" || drawer.kind === "transfer" || drawer.kind === "adjust") && <MovementDrawer mode={drawer.kind} prefill={drawer.prefill} onClose={() => setDrawer(null)} />}
 
-    {plan && <DetailDrawer title={plan.name} subtitle="Uniform recovery plan" onClose={() => setPlan(null)}
-      footer={<>
-        <Button variant="outline" onClick={() => setPlan(null)}>Close</Button>
-        <Button onClick={() => { notify(`${plan.name} is now the default plan`); setPlan(null); }}><CheckCircle2 />Make default</Button>
-      </>}>
-      <Section title="How it's paid">
-        <DefRows rows={[
-          { label: "Paid when issued", value: rupees(plan.upfront), mono: true },
-          { label: "Recovered from salary", value: rupees(plan.deduction), mono: true },
-          { label: "Total cost to employee", value: rupees(plan.total), mono: true, total: true },
-        ]} />
-        <p className="mt-3 text-xs leading-relaxed text-muted">{plan.note}</p>
-      </Section>
-      <Section title="Uptake">
-        <KeyValue label="Employees on this plan" value={plan.people} />
-        <KeyValue label="Share of workforce" value={`${Math.round(plan.people / 468 * 100)}%`} />
-        <KeyValue label="Outstanding balance" value={rupees(plan.deduction * Math.round(plan.people * 0.4))} />
-      </Section>
-      <InlineAlert>An employee with an unpaid balance on this plan can’t complete exit clearance.</InlineAlert>
-    </DetailDrawer>}
   </>;
 }
 
