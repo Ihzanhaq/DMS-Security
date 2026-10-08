@@ -12,7 +12,7 @@ export type BenefitScheme = "salary-only" | "esi" | "pf-esi";
 
 export type AppView =
   | "dashboard" | "workforce" | "sites" | "deployment" | "attendance"
-  | "payroll" | "advances" | "uniforms" | "inspections" | "complaints"
+  | "payroll" | "advances" | "uniforms" | "inventory" | "uniform-requests" | "inspections" | "complaints"
   | "reports" | "imports" | "settings"
   | "employee-form" | "site-config" | "site-detail" | "site-attendance" | "assignment-form" | "attendance-correction"
   | "payroll-allocation" | "night-vigilance" | "uniform-issue" | "exit-clearance"
@@ -304,23 +304,78 @@ export type SpareDutyPayment = {
 
 /* -------------------------- Module 6 · Inventory --------------------------- */
 
-export type UniformBatch = {
-  batchNo: string;
-  item: string;
-  size: string;
-  qty: number;
-  receivedOn: string;
+export type InventoryCategory = "uniform" | "equipment";
+/** Consumables are handed over for good; assets are returnable and tracked against the holder. */
+export type InventoryKind = "consumable" | "asset";
+export type InventoryItem = {
+  id: string;
+  name: string;
+  category: InventoryCategory;
+  kind: InventoryKind;
+  /** Empty means one size, stored on movements as ONE_SIZE. */
+  sizes: string[];
+  unitCost: number;
+  reorderLevel: number;
+  /** Pieces in the joining kit; 0 when not part of the kit. */
+  perKit: number;
+  active: boolean;
 };
 
-export type UniformRequestStatus = "requested" | "approved" | "dispatched" | "delivered";
+export type Store = { id: string; name: string; city: string };
+
+export type MovementType = "receipt" | "issue" | "return" | "transfer" | "adjustment" | "write-off";
+/** One line of the stock ledger. Stock on hand is always derived from these. */
+export type StockMovement = {
+  id: string;
+  date: string;
+  type: MovementType;
+  itemId: string;
+  size: string;
+  /** Always positive. Adjustment direction comes from `delta`. */
+  qty: number;
+  delta?: number;
+  storeId: string;
+  toStoreId?: string;
+  employeeId?: string;
+  batchNo?: string;
+  supplier?: string;
+  reason?: string;
+  requestId?: string;
+  by: string;
+};
+
+export type UniformRequestStatus = "requested" | "approved" | "rejected" | "dispatched" | "delivered";
 export type UniformRequest = {
   id: string;
   employeeId: string;
-  items: { item: string; size: string; qty: number }[];
+  items: { itemId: string; size: string; qty: number }[];
   status: UniformRequestStatus;
   requestedOn: string;
   amount: number;
   recoveryPlan: string;
+  storeId: string;
+  note?: string;
+  rejectReason?: string;
+  history: { status: UniformRequestStatus; on: string; by: string }[];
+};
+
+/* --------------------------- Site calendar marks --------------------------- */
+
+export type CalendarMarkType = "holiday" | "closure" | "event" | "note";
+export type SiteCalendarMark = {
+  id: string;
+  /** Site name, or "all" for company-wide holidays. */
+  siteId: string;
+  type: CalendarMarkType;
+  title: string;
+  /** Inclusive ISO dates. */
+  start: string;
+  end: string;
+  payMultiplier?: number;
+  extraGuards?: number;
+  from?: string;
+  to?: string;
+  notes?: string;
 };
 
 /* ----------------------- Module 7 · HR quality & exit ---------------------- */
