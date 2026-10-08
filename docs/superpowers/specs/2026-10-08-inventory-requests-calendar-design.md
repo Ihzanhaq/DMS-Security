@@ -4,7 +4,7 @@ Date: 2026-10-08 · Branch: `feat/inventory-requests-calendar`
 
 ## Goal
 
-1. Split the current Uniforms screen into two dedicated pages: **Inventory** (a proper stock system) and **Uniform requests**.
+1. Split the current Uniforms screen into two dedicated pages under a new top-level **Inventory** nav module (removed from Payroll): **Inventory** (a proper stock system) and **Uniform requests**.
 2. Let users mark holidays, closures, events and notes on a site's attendance calendar.
 3. Replace the congested "Uniform kit stock" card drawer with a readable layout.
 
@@ -28,7 +28,7 @@ Seed: existing `uniformKit` + `uniformBatches` converted to items + receipt move
 
 Holds items, stores, movements, uniform requests. Exposes `stockOf(itemId, size?, storeId?)`, `receive`, `issue`, `returnItem`, `transfer`, `adjust`, `writeOff`, `upsertItem`, `setItemActive`, plus request actions (section 2). Each mutating action validates and returns `{ ok: true } | { ok: false, error }`; it never lets stock go negative. Persisted under `bmg-inventory-v1`, synced via `BroadcastChannel("bmg-inventory")`.
 
-### Screen — `features/inventory/inventory-screen.tsx` (nav: Finance → "Inventory", view `inventory`)
+### Screen — `features/inventory/inventory-screen.tsx` (nav: new top-level module "Inventory", view `inventory`)
 
 - Header actions: **Receive stock** (primary), Transfer, Adjust, Issue to employee, Export.
 - Stat tiles: active items, stock value (₹), below reorder (click filters), assets out with guards.
@@ -58,7 +58,7 @@ No cards, no multi-line wrapping of batch metadata.
 
 `UniformRequest` gains: `status` adds `"rejected"`; `storeId`; `note?`; `rejectReason?`; `handledBy?`; `history: { status, on, by }[]`.
 
-### Screen — `features/inventory/uniform-requests-screen.tsx` (nav: Finance → "Uniform requests", view `uniform-requests`)
+### Screen — `features/inventory/uniform-requests-screen.tsx` (nav: Inventory module → "Uniform requests", view `uniform-requests`)
 
 - Stat tiles per status (requested / approved / dispatched / delivered), click to filter.
 - Filters: status, store, search by employee name/ID.
